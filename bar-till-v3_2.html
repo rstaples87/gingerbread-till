@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gingerbread Till v3</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#eef0f4;display:flex;justify-content:center;min-height:100vh;}
+.app{width:100%;max-width:520px;min-height:100vh;background:#eef0f4;display:flex;flex-direction:column;position:relative;}
+
+/* HEADER */
+.header{background:#1a1a2e;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.header-left .title{font-size:17px;font-weight:700;}
+.header-left .sub{font-size:11px;opacity:0.45;margin-top:1px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.staff-pill{background:rgba(255,255,255,0.13);border-radius:20px;padding:5px 11px;font-size:12px;cursor:pointer;border:none;color:#fff;font-family:inherit;}
+.clock{font-size:12px;opacity:0.45;}
+
+/* NAV */
+.nav{background:#1a1a2e;border-top:1px solid rgba(255,255,255,0.07);display:flex;flex-shrink:0;}
+.nav-btn{flex:1;padding:9px 2px;font-size:11px;font-weight:500;color:rgba(255,255,255,0.4);border:none;background:none;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all 0.15s;}
+.nav-btn.active{color:#fff;border-bottom-color:#fff;}
+
+/* VIEWS */
+.view{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.view.active{display:flex;}
+
+/* LOW STOCK BANNER */
+.low-stock-banner{background:#fff3cd;border-bottom:1px solid #ffc107;padding:8px 14px;font-size:12px;color:#856404;flex-shrink:0;display:none;}
+.low-stock-banner.show{display:block;}
+
+/* TABS BAR */
+.tabs-bar{background:#fff;border-bottom:1px solid #e5e5e5;padding:8px 10px;display:flex;gap:7px;overflow-x:auto;flex-shrink:0;align-items:center;}
+.tabs-bar::-webkit-scrollbar{display:none;}
+.tab-chip{padding:6px 13px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #ddd;background:#f8f8f8;color:#666;white-space:nowrap;flex-shrink:0;transition:all 0.12s;}
+.tab-chip.active{background:#1a1a2e;color:#fff;border-color:#1a1a2e;}
+.tab-chip.has-items{border-color:#1a1a2e;color:#1a1a2e;background:#eef0f8;}
+.add-tab-btn{width:30px;height:30px;border-radius:50%;border:1px dashed #ccc;background:none;font-size:20px;color:#aaa;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+
+/* CATEGORY TOGGLES */
+.cat-toggles{background:#fff;border-bottom:1px solid #e5e5e5;padding:7px 10px;display:flex;gap:6px;overflow-x:auto;flex-shrink:0;}
+.cat-toggles::-webkit-scrollbar{display:none;}
+.cat-toggle{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid #ddd;background:#f8f8f8;color:#888;white-space:nowrap;flex-shrink:0;transition:all 0.12s;}
+.cat-toggle.active{background:#1a1a2e;color:#fff;border-color:#1a1a2e;}
+.cat-toggle.off{opacity:0.45;text-decoration:line-through;}
+
+/* PRODUCTS */
+.products-scroll{flex:1;overflow-y:auto;padding:10px;}
+.cat-section{margin-bottom:6px;}
+.cat-label{font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:1.2px;margin:12px 0 6px;display:flex;align-items:center;gap:8px;}
+.cat-label:first-child{margin-top:0;}
+.cat-hide-btn{font-size:10px;color:#bbb;cursor:pointer;border:none;background:none;font-family:inherit;padding:0;}
+.products-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.prod-btn{background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:10px 9px;cursor:pointer;text-align:left;font-family:inherit;width:100%;transition:transform 0.1s;}
+.prod-btn:active{transform:scale(0.96);}
+.prod-btn.out{opacity:0.35;pointer-events:none;}
+.prod-name{font-size:12px;font-weight:500;color:#1a1a1a;line-height:1.3;}
+.prod-price{font-size:15px;font-weight:700;color:#1a1a2e;margin-top:4px;}
+.prod-stock{font-size:10px;color:#bbb;margin-top:2px;}
+.prod-stock.low{color:#c0392b;font-weight:600;}
+
+/* ORDER PANEL */
+.order-panel{background:#fff;border-top:1px solid #e5e5e5;flex-shrink:0;display:flex;flex-direction:column;max-height:46vh;}
+.order-head{padding:8px 14px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.order-head-title{font-size:13px;font-weight:600;}
+.clear-btn{font-size:12px;color:#c0392b;cursor:pointer;border:none;background:none;font-family:inherit;}
+.order-items{overflow-y:auto;flex:1;padding:4px 14px;}
+.order-empty{padding:16px 0;text-align:center;font-size:13px;color:#ccc;}
+.order-item{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f5f5f5;}
+.order-item:last-child{border-bottom:none;}
+.oi-name{font-size:13px;font-weight:500;}
+.oi-unit{font-size:10px;color:#ccc;margin-top:1px;}
+.oi-controls{display:flex;align-items:center;gap:8px;}
+.qty-btn{width:26px;height:26px;border-radius:50%;border:1px solid #e0e0e0;background:#f8f8f8;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;font-family:inherit;}
+.oi-qty{font-size:14px;font-weight:700;min-width:18px;text-align:center;}
+.oi-sub{font-size:12px;font-weight:600;min-width:44px;text-align:right;color:#1a1a2e;}
+.order-footer{padding:10px 14px 14px;border-top:1px solid #f0f0f0;flex-shrink:0;}
+.total-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+.total-label{font-size:13px;color:#aaa;}
+.total-amount{font-size:26px;font-weight:700;color:#1a1a2e;}
+.pay-toggle{display:flex;gap:6px;margin-bottom:10px;}
+.pay-btn{flex:1;padding:8px;border:1px solid #e0e0e0;border-radius:8px;background:#f8f8f8;font-size:13px;font-weight:500;color:#888;cursor:pointer;font-family:inherit;transition:all 0.12s;}
+.pay-btn.active{border-color:#1a1a2e;background:#1a1a2e;color:#fff;}
+.action-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.charge-btn{padding:13px;background:#1a1a2e;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.15s;}
+.charge-btn:disabled{opacity:0.28;cursor:default;}
+.charge-btn:active:not(:disabled){opacity:0.8;}
+.tab-btn{padding:13px;background:#fff;border:1px solid #1a1a2e;border-radius:10px;font-size:15px;font-weight:600;color:#1a1a2e;cursor:pointer;font-family:inherit;}
+.tab-btn:disabled{opacity:0.28;cursor:default;}
+
+/* TABS VIEW */
+.tabs-scroll{flex:1;overflow-y:auto;padding:12px;}
+.open-tab-card{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:13px 14px;margin-bottom:10px;}
+.otc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.otc-name{font-size:15px;font-weight:600;}
+.otc-total{font-size:18px;font-weight:700;color:#1a1a2e;}
+.otc-meta{font-size:11px;color:#bbb;margin-bottom:8px;}
+.otc-items{font-size:12px;color:#888;line-height:1.7;margin-bottom:10px;border-top:1px solid #f5f5f5;padding-top:8px;white-space:pre-line;}
+.otc-btns{display:flex;gap:7px;}
+.otc-btn{flex:1;padding:9px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;}
+.otc-btn-add{border:1px solid #1a1a2e;background:#fff;color:#1a1a2e;}
+.otc-btn-settle{border:none;background:#1a1a2e;color:#fff;}
+.otc-btn-cancel{border:1px solid #e0e0e0;background:#f8f8f8;color:#c0392b;}
+.no-tabs{text-align:center;padding:50px 20px;color:#ccc;font-size:14px;}
+
+/* STOCK VIEW */
+.stock-scroll{flex:1;overflow-y:auto;padding:12px;}
+.stock-item{display:flex;align-items:center;gap:10px;padding:10px 13px;background:#fff;border:1px solid #e5e5e5;border-radius:10px;margin-bottom:7px;}
+.si-info{flex:1;}
+.si-name{font-size:13px;font-weight:500;}
+.si-meta{font-size:11px;color:#bbb;margin-top:1px;}
+.si-controls{display:flex;align-items:center;gap:8px;}
+.si-qty{font-size:18px;font-weight:700;min-width:34px;text-align:center;color:#1a1a2e;}
+.stock-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;margin-left:5px;}
+.badge-ok{background:#eafbee;color:#1e7e34;}
+.badge-low{background:#fdf0ee;color:#c0392b;}
+.badge-out{background:#f0f0f0;color:#999;}
+
+/* SALES VIEW */
+.sales-scroll{flex:1;overflow-y:auto;padding:12px;}
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;}
+.stat-card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:12px 13px;}
+.sc-label{font-size:10px;color:#bbb;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px;}
+.sc-value{font-size:20px;font-weight:700;color:#1a1a2e;}
+.tx-card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:10px 13px;margin-bottom:7px;}
+.tx-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;}
+.tx-time{font-size:11px;color:#bbb;}
+.tx-total{font-size:14px;font-weight:700;color:#1a1a2e;}
+.tx-meta{font-size:11px;color:#bbb;margin-bottom:3px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+.tx-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;}
+.badge-cash{background:#eafbee;color:#1e7e34;}
+.badge-card{background:#e8eef8;color:#1a5ca8;}
+.badge-tab{background:#f5f0fb;color:#7c3aed;}
+.badge-account{background:#fff8e1;color:#b45309;}
+.badge-void{background:#fdf0ee;color:#c0392b;}
+.tx-detail{font-size:11px;color:#aaa;line-height:1.6;}
+.tx-voided{opacity:0.45;text-decoration:line-through;}
+.void-btn{font-size:10px;color:#c0392b;border:none;background:none;cursor:pointer;font-family:inherit;padding:0;margin-left:auto;}
+.no-tx{text-align:center;padding:40px 20px;color:#ccc;font-size:14px;}
+.session-btn{width:100%;padding:11px;background:#fff;border:1px solid #e5e5e5;border-radius:10px;font-size:13px;color:#c0392b;cursor:pointer;font-family:inherit;margin-top:6px;}
+.report-btn{width:100%;padding:11px;background:#1a1a2e;border:none;border-radius:10px;font-size:13px;color:#fff;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px;}
+
+/* OVERLAYS */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.52);display:none;align-items:flex-end;justify-content:center;z-index:300;}
+.overlay.show{display:flex;}
+.sheet{background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:20px 18px 34px;max-height:90vh;overflow-y:auto;}
+.sheet-title{font-size:13px;color:#aaa;font-weight:500;margin-bottom:3px;}
+.sheet-amount{font-size:40px;font-weight:700;color:#1a1a2e;margin-bottom:8px;}
+.sheet-items{font-size:13px;color:#aaa;line-height:1.7;margin-bottom:6px;white-space:pre-line;}
+.sheet-pay-label{font-size:12px;color:#aaa;margin-bottom:6px;margin-top:12px;}
+.sheet-pay-row{display:flex;gap:8px;margin-bottom:16px;}
+.sheet-pay-btn{flex:1;padding:10px;border-radius:9px;border:1px solid #e0e0e0;background:#f8f8f8;font-size:14px;font-weight:500;color:#888;cursor:pointer;font-family:inherit;transition:all 0.12s;}
+.sheet-pay-btn.active{border-color:#1a1a2e;background:#1a1a2e;color:#fff;}
+.sheet-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.btn-cancel{padding:13px;border:1px solid #ddd;border-radius:10px;background:#f8f8f8;font-size:14px;cursor:pointer;font-family:inherit;}
+.btn-confirm{padding:13px;background:#1a1a2e;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
+
+/* NUMPAD */
+.numpad-product{font-size:14px;font-weight:600;color:#1a1a2e;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #f0f0f0;}
+.numpad-display{font-size:36px;font-weight:700;color:#1a1a2e;text-align:center;margin:10px 0 16px;min-height:48px;}
+.numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+.np-btn{padding:16px;border:1px solid #e5e5e5;border-radius:10px;font-size:18px;font-weight:500;cursor:pointer;font-family:inherit;background:#fff;transition:background 0.1s;}
+.np-btn:active{background:#f0f0f0;}
+.np-btn.del{color:#c0392b;font-size:14px;}
+.np-btn.confirm{background:#1a1a2e;color:#fff;border-color:#1a1a2e;font-size:14px;font-weight:600;}
+.np-btn.confirm:active{background:#2d2d4e;}
+
+/* STAFF OVERLAY */
+.staff-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:400;}
+.staff-overlay.show{display:flex;}
+.staff-sheet{background:#fff;width:90%;max-width:340px;border-radius:16px;padding:22px 18px 24px;}
+.staff-sheet h2{font-size:17px;font-weight:700;margin-bottom:4px;}
+.staff-sheet p{font-size:13px;color:#aaa;margin-bottom:16px;}
+.staff-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;}
+.staff-btn{padding:14px 10px;border:1px solid #e5e5e5;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;background:#fff;transition:all 0.12s;}
+.staff-btn.selected{background:#1a1a2e;color:#fff;border-color:#1a1a2e;}
+.staff-add{width:100%;padding:11px;border:1px dashed #ccc;border-radius:10px;background:none;font-size:13px;color:#aaa;cursor:pointer;font-family:inherit;}
+
+/* NEW TAB OVERLAY */
+.newtab-sheet{background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:20px 18px 34px;}
+.newtab-sheet h2{font-size:16px;font-weight:700;margin-bottom:14px;}
+.newtab-input{width:100%;padding:13px 14px;border:1px solid #e0e0e0;border-radius:10px;font-size:15px;font-family:inherit;margin-bottom:14px;outline:none;}
+.newtab-input:focus{border-color:#1a1a2e;}
+.preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:16px;}
+.preset-btn{padding:10px 6px;border:1px solid #e5e5e5;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:#fff;}
+.preset-btn:active{background:#1a1a2e;color:#fff;}
+
+/* END OF NIGHT REPORT */
+.report-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;align-items:flex-start;justify-content:center;z-index:500;padding-top:20px;}
+.report-overlay.show{display:flex;}
+.report-sheet{background:#fff;width:95%;max-width:520px;border-radius:16px;padding:22px 18px 28px;max-height:90vh;overflow-y:auto;}
+.report-header{text-align:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #1a1a2e;}
+.report-header h2{font-size:20px;font-weight:700;color:#1a1a2e;}
+.report-header p{font-size:12px;color:#aaa;margin-top:4px;}
+.report-section{margin-bottom:18px;}
+.report-section h3{font-size:12px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
+.report-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5;font-size:14px;}
+.report-row:last-child{border-bottom:none;}
+.report-row.total{font-weight:700;font-size:16px;color:#1a1a2e;border-top:2px solid #1a1a2e;padding-top:10px;margin-top:4px;}
+.report-row.highlight{background:#f8f9ff;margin:0 -4px;padding:7px 4px;border-radius:6px;}
+.pop-item{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px;border-bottom:1px solid #f5f5f5;}
+.pop-item:last-child{border-bottom:none;}
+.pop-rank{color:#aaa;font-size:11px;min-width:20px;}
+.pop-bar{height:6px;background:#1a1a2e;border-radius:3px;margin:2px 0;}
+.float-input-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.float-label{font-size:14px;color:#555;white-space:nowrap;}
+.float-input{flex:1;padding:10px 14px;border:1px solid #e0e0e0;border-radius:9px;font-size:16px;font-weight:600;font-family:inherit;outline:none;text-align:right;}
+.float-input:focus{border-color:#1a1a2e;}
+.report-close-btn{width:100%;padding:13px;background:#1a1a2e;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:6px;}
+.report-print-btn{width:100%;padding:11px;background:#fff;border:1px solid #1a1a2e;border-radius:10px;font-size:14px;font-weight:500;color:#1a1a2e;cursor:pointer;font-family:inherit;margin-bottom:8px;}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#1a1a2e;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;transition:transform 0.25s ease;z-index:999;pointer-events:none;white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+@media print{
+  body{background:#fff;}
+  .app{max-width:100%;}
+  .report-overlay{position:static;padding:0;background:none;}
+  .report-sheet{max-height:none;border-radius:0;box-shadow:none;width:100%;}
+  .report-close-btn,.report-print-btn{display:none;}
+  .float-input{border:none;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="title">Gingerbread Till</div>
+      <div class="sub" id="header-sub">v3</div>
+    </div>
+    <div class="header-right">
+      <button class="staff-pill" id="staff-pill" onclick="openStaffOverlay()">👤 Select staff</button>
+      <div class="clock" id="clock"></div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="nav">
+    <button class="nav-btn active" onclick="showView('till',this)">Till</button>
+    <button class="nav-btn" onclick="showView('tabs',this)">Tabs <span id="open-tabs-count"></span></button>
+    <button class="nav-btn" onclick="showView('stock',this)">Stock</button>
+    <button class="nav-btn" onclick="showView('sales',this)">Sales</button>
+  </div>
+
+  <!-- TILL VIEW -->
+  <div class="view active" id="view-till">
+    <div id="low-stock-banner" class="low-stock-banner"></div>
+    <div class="tabs-bar" id="tabs-bar"></div>
+    <div class="cat-toggles" id="cat-toggles"></div>
+    <div class="products-scroll" id="products-panel"></div>
+    <div class="order-panel">
+      <div class="order-head">
+        <span class="order-head-title" id="order-head-title">Quick sale</span>
+        <button class="clear-btn" onclick="clearCurrentOrder()">Clear</button>
+      </div>
+      <div class="order-items" id="order-items"><div class="order-empty">Tap a product to add it</div></div>
+      <div class="order-footer">
+        <div class="total-row">
+          <span class="total-label">Total</span>
+          <span class="total-amount" id="total-display">£0.00</span>
+        </div>
+        <div class="pay-toggle" id="pay-toggle">
+          <button class="pay-btn active" onclick="setPayment('cash',this)">💵 Cash</button>
+          <button class="pay-btn" onclick="setPayment('card',this)">💳 Card</button>
+        </div>
+        <div class="action-btns">
+          <button class="tab-btn" id="add-to-tab-btn" onclick="addToTabMode()" disabled>Add to tab ↑</button>
+          <button class="charge-btn" id="charge-btn" disabled onclick="openChargeConfirm()">Charge</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABS VIEW -->
+  <div class="view" id="view-tabs">
+    <div class="tabs-scroll" id="tabs-panel"></div>
+  </div>
+
+  <!-- STOCK VIEW -->
+  <div class="view" id="view-stock">
+    <div class="stock-scroll" id="stock-panel"></div>
+  </div>
+
+  <!-- SALES VIEW -->
+  <div class="view" id="view-sales">
+    <div class="sales-scroll" id="sales-panel"></div>
+  </div>
+
+</div>
+
+<!-- CHARGE CONFIRM OVERLAY -->
+<div class="overlay" id="charge-overlay">
+  <div class="sheet">
+    <div class="sheet-title" id="conf-title">Confirm charge</div>
+    <div class="sheet-amount" id="conf-amount"></div>
+    <div class="sheet-items" id="conf-items"></div>
+    <div class="sheet-pay-label">Payment method</div>
+    <div class="sheet-pay-row" id="conf-pay-row">
+      <button class="sheet-pay-btn active" onclick="setConfPayment('cash',this)">💵 Cash</button>
+      <button class="sheet-pay-btn" onclick="setConfPayment('card',this)">💳 Card</button>
+    </div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" onclick="closeOverlay('charge-overlay')">Cancel</button>
+      <button class="btn-confirm" onclick="processCharge()">Confirm charge</button>
+    </div>
+  </div>
+</div>
+
+<!-- NUMPAD OVERLAY -->
+<div class="overlay" id="numpad-overlay">
+  <div class="sheet">
+    <div class="numpad-product" id="numpad-product"></div>
+    <div class="numpad-display" id="numpad-display">1</div>
+    <div class="numpad-grid">
+      <button class="np-btn" onclick="npDigit('1')">1</button>
+      <button class="np-btn" onclick="npDigit('2')">2</button>
+      <button class="np-btn" onclick="npDigit('3')">3</button>
+      <button class="np-btn" onclick="npDigit('4')">4</button>
+      <button class="np-btn" onclick="npDigit('5')">5</button>
+      <button class="np-btn" onclick="npDigit('6')">6</button>
+      <button class="np-btn" onclick="npDigit('7')">7</button>
+      <button class="np-btn" onclick="npDigit('8')">8</button>
+      <button class="np-btn" onclick="npDigit('9')">9</button>
+      <button class="np-btn del" onclick="npDelete()">⌫ Del</button>
+      <button class="np-btn" onclick="npDigit('0')">0</button>
+      <button class="np-btn confirm" onclick="npConfirm()">Add ✓</button>
+    </div>
+    <button class="btn-cancel" style="width:100%" onclick="closeOverlay('numpad-overlay')">Cancel</button>
+  </div>
+</div>
+
+<!-- NEW TAB OVERLAY -->
+<div class="overlay" id="newtab-overlay">
+  <div class="newtab-sheet">
+    <h2>Open a new tab</h2>
+    <input class="newtab-input" id="newtab-input" type="text" placeholder="Name or table number…" maxlength="24">
+    <div class="preset-grid" id="preset-grid"></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" onclick="closeOverlay('newtab-overlay')">Cancel</button>
+      <button class="btn-confirm" onclick="confirmNewTab()">Open tab</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTLE TAB OVERLAY -->
+<div class="overlay" id="settle-overlay">
+  <div class="sheet">
+    <div class="sheet-title">Settle tab</div>
+    <div class="sheet-amount" id="settle-amount"></div>
+    <div class="sheet-items" id="settle-items"></div>
+    <div class="sheet-pay-label">Payment method</div>
+    <div class="sheet-pay-row">
+      <button class="sheet-pay-btn active" id="settle-cash-btn" onclick="setSettlePayment('cash',this)">💵 Cash</button>
+      <button class="sheet-pay-btn" id="settle-card-btn" onclick="setSettlePayment('card',this)">💳 Card</button>
+      <button class="sheet-pay-btn" id="settle-account-btn" onclick="setSettlePayment('account',this)">📋 Account</button>
+    </div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" onclick="closeOverlay('settle-overlay')">Cancel</button>
+      <button class="btn-confirm" onclick="confirmSettle()">Settle &amp; close tab</button>
+    </div>
+  </div>
+</div>
+
+<!-- STAFF OVERLAY -->
+<div class="staff-overlay" id="staff-overlay">
+  <div class="staff-sheet">
+    <h2>Who's serving?</h2>
+    <p>Select your name to log sales against you</p>
+    <div class="staff-grid" id="staff-grid"></div>
+    <button class="staff-add" onclick="addStaffPrompt()">+ Add staff member</button>
+  </div>
+</div>
+
+<!-- END OF NIGHT REPORT OVERLAY -->
+<div class="report-overlay" id="report-overlay">
+  <div class="report-sheet" id="report-sheet">
+    <div class="report-header">
+      <h2>End of Night Report</h2>
+      <p id="report-date"></p>
+    </div>
+
+    <div class="report-section">
+      <h3>Cash float</h3>
+      <div class="float-input-row">
+        <span class="float-label">Starting float</span>
+        <input class="float-input" id="float-input" type="number" value="50" min="0" step="5" oninput="renderReport()">
+        <span class="float-label">£</span>
+      </div>
+    </div>
+
+    <div id="report-body"></div>
+
+    <button class="report-print-btn" onclick="window.print()">🖨 Print report</button>
+    <button class="report-close-btn" onclick="closeOverlay('report-overlay')">Close</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── DATA ──────────────────────────────────────────
+const PRODUCTS=[
+  {id:1, name:'Pint Lager',         price:5.50,category:'Draught',    stock:40},
+  {id:2, name:'Pint Ale',           price:5.00,category:'Draught',    stock:32},
+  {id:3, name:'Half Lager',         price:3.00,category:'Draught',    stock:40},
+  {id:4, name:'Half Ale',           price:2.70,category:'Draught',    stock:32},
+  {id:5, name:'Red Wine (bottle)',  price:18.00,category:'Wine',      stock:12},
+  {id:6, name:'White Wine (bottle)',price:18.00,category:'Wine',      stock:8},
+  {id:7, name:'Glass of Wine',      price:5.50,category:'Wine',       stock:20},
+  {id:8, name:'Prosecco (bottle)',  price:22.00,category:'Wine',      stock:6},
+  {id:9, name:'Gin & Tonic',        price:6.50,category:'Spirits',   stock:25},
+  {id:10,name:'Rum & Coke',         price:6.00,category:'Spirits',   stock:20},
+  {id:11,name:'Vodka Mixer',        price:6.00,category:'Spirits',   stock:20},
+  {id:12,name:'Whisky',             price:5.50,category:'Spirits',   stock:15},
+  {id:13,name:'Soft Drink',         price:2.50,category:'Soft Drinks',stock:30},
+  {id:14,name:'Still Water',        price:1.50,category:'Soft Drinks',stock:24},
+  {id:15,name:'Sparkling Water',    price:1.50,category:'Soft Drinks',stock:18},
+  {id:16,name:'Fruit Juice',        price:2.00,category:'Soft Drinks',stock:16},
+];
+
+let STAFF=['Alice','Ben','Chloe','Dan'];
+const TAB_PRESETS=['Table 1','Table 2','Table 3','Table 4','Table 5','Table 6'];
+const CATS=[...new Set(PRODUCTS.map(p=>p.category))];
+
+let stock={};
+PRODUCTS.forEach(p=>stock[p.id]=p.stock);
+
+let currentStaff=null;
+let currentPayment='cash';
+let confPayment='cash';
+let settlePayment='cash';
+let orders={quick:{}};
+let activeOrderKey='quick';
+let openTabs=[];
+let transactions=[];
+let settlingTabId=null;
+let tabIdCounter=1;
+let hiddenCats=new Set();
+let numpadProductId=null;
+let numpadValue='1';
+
+// ── UTILS ─────────────────────────────────────────
+const fmt=n=>'£'+n.toFixed(2);
+const getProduct=id=>PRODUCTS.find(p=>p.id==id);
+function getOrderTotal(o){return Object.keys(o).reduce((s,id)=>s+getProduct(id).price*o[id],0);}
+function orderToItems(o){return Object.keys(o).map(id=>{const p=getProduct(id);return{name:p.name,qty:o[id],price:p.price};});}
+function itemsText(items){return items.map(i=>i.qty+'× '+i.name).join('\n');}
+function tabTotal(tab){return tab.items.reduce((s,i)=>s+i.price*i.qty,0);}
+
+// ── LOW STOCK BANNER ──────────────────────────────
+function updateLowStockBanner(){
+  const low=PRODUCTS.filter(p=>stock[p.id]>0&&stock[p.id]<=5).map(p=>p.name);
+  const out=PRODUCTS.filter(p=>stock[p.id]===0).map(p=>p.name);
+  const banner=document.getElementById('low-stock-banner');
+  let msg='';
+  if(out.length) msg+='⚠ Out of stock: '+out.join(', ')+'. ';
+  if(low.length) msg+='Low stock: '+low.join(', ')+'.';
+  if(msg){banner.textContent=msg;banner.classList.add('show');}
+  else{banner.classList.remove('show');}
+}
+
+// ── STAFF ─────────────────────────────────────────
+function openStaffOverlay(){renderStaffGrid();document.getElementById('staff-overlay').classList.add('show');}
+function renderStaffGrid(){
+  document.getElementById('staff-grid').innerHTML=STAFF.map(name=>
+    `<button class="staff-btn${currentStaff===name?' selected':''}" onclick="selectStaff('${name}')">${name}</button>`
+  ).join('');
+}
+function selectStaff(name){
+  currentStaff=name;
+  document.getElementById('staff-pill').textContent='👤 '+name;
+  document.getElementById('staff-overlay').classList.remove('show');
+  showToast('Serving as '+name);
+}
+function addStaffPrompt(){
+  const name=prompt('Enter staff member name:');
+  if(name&&name.trim()){STAFF.push(name.trim());renderStaffGrid();}
+}
+
+// ── VIEWS ─────────────────────────────────────────
+function showView(name,btn){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  btn.classList.add('active');
+  if(name==='stock') renderStock();
+  if(name==='sales') renderSales();
+  if(name==='tabs') renderTabsPanel();
+}
+
+// ── CATEGORY TOGGLES ──────────────────────────────
+function renderCatToggles(){
+  document.getElementById('cat-toggles').innerHTML=CATS.map(cat=>{
+    const off=hiddenCats.has(cat);
+    return `<button class="cat-toggle${off?' off':' active'}" onclick="toggleCat('${cat}',this)">${cat}</button>`;
+  }).join('');
+}
+function toggleCat(cat,btn){
+  if(hiddenCats.has(cat)){hiddenCats.delete(cat);btn.classList.remove('off');btn.classList.add('active');}
+  else{hiddenCats.add(cat);btn.classList.add('off');btn.classList.remove('active');}
+  renderProducts();
+}
+
+// ── TABS BAR ──────────────────────────────────────
+function renderTabsBar(){
+  const bar=document.getElementById('tabs-bar');
+  let html=`<button class="tab-chip${activeOrderKey==='quick'?' active':''}" onclick="switchOrder('quick')">Quick sale</button>`;
+  openTabs.forEach(tab=>{
+    const hasItems=orders[tab.id]&&Object.keys(orders[tab.id]).length>0;
+    const cls=activeOrderKey===tab.id?' active':(hasItems?' has-items':'');
+    html+=`<button class="tab-chip${cls}" onclick="switchOrder('${tab.id}')">${tab.name}</button>`;
+  });
+  html+=`<button class="add-tab-btn" onclick="openNewTab()" title="New tab">+</button>`;
+  bar.innerHTML=html;
+  const el=document.getElementById('open-tabs-count');
+  el.textContent=openTabs.length>0?`(${openTabs.length})`:'';
+}
+function switchOrder(key){
+  activeOrderKey=key;
+  renderTabsBar();renderOrder();renderProducts();
+  const title=key==='quick'?'Quick sale':openTabs.find(t=>t.id==key)?.name||'Tab';
+  document.getElementById('order-head-title').textContent=title;
+}
+
+// ── NEW TAB ───────────────────────────────────────
+function openNewTab(){
+  document.getElementById('newtab-input').value='';
+  document.getElementById('preset-grid').innerHTML=TAB_PRESETS.map(p=>
+    `<button class="preset-btn" onclick="setTabPreset('${p}')">${p}</button>`
+  ).join('');
+  document.getElementById('newtab-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('newtab-input').focus(),100);
+}
+function setTabPreset(name){document.getElementById('newtab-input').value=name;}
+function confirmNewTab(){
+  const name=document.getElementById('newtab-input').value.trim();
+  if(!name){showToast('Please enter a name');return;}
+  const id='tab_'+(tabIdCounter++);
+  openTabs.push({id,name,items:[],openedAt:new Date(),staff:currentStaff});
+  orders[id]={};
+  closeOverlay('newtab-overlay');
+  switchOrder(id);
+  renderTabsBar();
+  showToast('Tab opened: '+name);
+}
+
+// ── ADD TO TAB ────────────────────────────────────
+function addToTabMode(){
+  if(activeOrderKey!=='quick') return;
+  if(!openTabs.length){openNewTab();return;}
+  if(openTabs.length===1){mergeOrderToTab(openTabs[0].id);return;}
+  const names=openTabs.map((t,i)=>`${i+1}. ${t.name}`).join('\n');
+  const choice=prompt('Add to which tab?\n'+names+'\n\nEnter number:');
+  const idx=parseInt(choice)-1;
+  if(!isNaN(idx)&&openTabs[idx]) mergeOrderToTab(openTabs[idx].id);
+}
+function mergeOrderToTab(tabId){
+  const src=orders['quick'];
+  if(!orders[tabId]) orders[tabId]={};
+  Object.keys(src).forEach(id=>{orders[tabId][id]=(orders[tabId][id]||0)+src[id];});
+  orders['quick']={};
+  switchOrder(tabId);
+  showToast('Items added to '+openTabs.find(t=>t.id===tabId)?.name);
+}
+
+// ── NUMPAD ────────────────────────────────────────
+function openNumpad(productId){
+  numpadProductId=productId;
+  numpadValue='1';
+  const p=getProduct(productId);
+  document.getElementById('numpad-product').textContent=p.name+' — '+fmt(p.price)+' each';
+  document.getElementById('numpad-display').textContent='1';
+  document.getElementById('numpad-overlay').classList.add('show');
+}
+function npDigit(d){
+  if(numpadValue==='1'&&d!=='0') numpadValue=d;
+  else if(numpadValue.length<2) numpadValue+=d;
+  else numpadValue=numpadValue.slice(1)+d;
+  document.getElementById('numpad-display').textContent=parseInt(numpadValue)||1;
+}
+function npDelete(){
+  numpadValue=numpadValue.slice(0,-1)||'1';
+  document.getElementById('numpad-display').textContent=parseInt(numpadValue)||1;
+}
+function npConfirm(){
+  const qty=Math.max(1,parseInt(numpadValue)||1);
+  const id=numpadProductId;
+  if(stock[id]<=0) return;
+  if(!orders[activeOrderKey]) orders[activeOrderKey]={};
+  orders[activeOrderKey][id]=(orders[activeOrderKey][id]||0)+qty;
+  closeOverlay('numpad-overlay');
+  renderOrder();renderTabsBar();
+  showToast('Added '+qty+'× '+getProduct(id).name);
+}
+
+// ── PRODUCTS ──────────────────────────────────────
+function renderProducts(){
+  const cats=CATS.filter(c=>!hiddenCats.has(c));
+  document.getElementById('products-panel').innerHTML=cats.map(cat=>{
+    return `<div class="cat-section"><div class="cat-label">${cat}</div><div class="products-grid">${
+      PRODUCTS.filter(p=>p.category===cat).map(p=>{
+        const s=stock[p.id],isOut=s===0,isLow=s>0&&s<=5;
+        return `<button class="prod-btn${isOut?' out':''}" onclick="openNumpad(${p.id})">
+          <div class="prod-name">${p.name}</div>
+          <div class="prod-price">${fmt(p.price)}</div>
+          <div class="prod-stock${isLow?' low':''}">${isOut?'Out of stock':isLow?'Low — '+s+' left':s+' in stock'}</div>
+        </button>`;
+      }).join('')
+    }</div></div>`;
+  }).join('');
+}
+
+// ── ORDER ─────────────────────────────────────────
+function changeQty(id,delta){
+  orders[activeOrderKey][id]=(orders[activeOrderKey][id]||0)+delta;
+  if(orders[activeOrderKey][id]<=0) delete orders[activeOrderKey][id];
+  renderOrder();renderTabsBar();
+}
+function clearCurrentOrder(){orders[activeOrderKey]={};renderOrder();renderTabsBar();}
+function renderOrder(){
+  const orderObj=orders[activeOrderKey]||{};
+  const keys=Object.keys(orderObj);
+  const el=document.getElementById('order-items');
+  const isTab=activeOrderKey!=='quick';
+  if(!keys.length){
+    el.innerHTML='<div class="order-empty">Tap a product to add it</div>';
+    document.getElementById('total-display').textContent='£0.00';
+    document.getElementById('charge-btn').disabled=true;
+    document.getElementById('add-to-tab-btn').disabled=true;
+    document.getElementById('pay-toggle').style.display=isTab?'none':'flex';
+    document.getElementById('charge-btn').textContent=isTab?'Add items':'Charge';
+    return;
+  }
+  let total=0;
+  el.innerHTML=keys.map(id=>{
+    const p=getProduct(id),qty=orderObj[id],sub=p.price*qty;
+    total+=sub;
+    return `<div class="order-item">
+      <div><div class="oi-name">${p.name}</div><div class="oi-unit">${fmt(p.price)} each</div></div>
+      <div class="oi-controls">
+        <button class="qty-btn" onclick="changeQty(${id},-1)">−</button>
+        <span class="oi-qty">${qty}</span>
+        <button class="qty-btn" onclick="changeQty(${id},1)">+</button>
+        <span class="oi-sub">${fmt(sub)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('total-display').textContent=fmt(total);
+  document.getElementById('charge-btn').disabled=false;
+  document.getElementById('add-to-tab-btn').disabled=activeOrderKey!=='quick';
+  document.getElementById('pay-toggle').style.display=isTab?'none':'flex';
+  document.getElementById('charge-btn').textContent=isTab?'Add items':'Charge';
+}
+
+// ── PAYMENT ───────────────────────────────────────
+function setPayment(type,btn){currentPayment=type;document.querySelectorAll('.pay-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function setConfPayment(type,btn){confPayment=type;document.querySelectorAll('#conf-pay-row .sheet-pay-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function setSettlePayment(type,btn){settlePayment=type;document.querySelectorAll('#settle-overlay .sheet-pay-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+
+// ── CHARGE ────────────────────────────────────────
+function openChargeConfirm(){
+  const isTab=activeOrderKey!=='quick';
+  if(isTab){commitItemsToTab();return;}
+  const orderObj=orders['quick'];
+  confPayment=currentPayment;
+  document.getElementById('conf-amount').textContent=fmt(getOrderTotal(orderObj));
+  document.getElementById('conf-items').textContent=itemsText(orderToItems(orderObj));
+  document.querySelectorAll('#conf-pay-row .sheet-pay-btn').forEach((b,i)=>{
+    b.classList.toggle('active',(i===0&&confPayment==='cash')||(i===1&&confPayment==='card'));
+  });
+  document.getElementById('charge-overlay').classList.add('show');
+}
+function commitItemsToTab(){
+  const tab=openTabs.find(t=>t.id===activeOrderKey);
+  if(!tab) return;
+  const orderObj=orders[activeOrderKey];
+  Object.keys(orderObj).forEach(id=>{
+    const p=getProduct(id),qty=orderObj[id];
+    stock[id]=Math.max(0,stock[id]-qty);
+    const ex=tab.items.find(i=>i.name===p.name);
+    if(ex) ex.qty+=qty; else tab.items.push({name:p.name,qty,price:p.price});
+  });
+  orders[activeOrderKey]={};
+  renderOrder();renderProducts();renderTabsBar();updateLowStockBanner();
+  showToast('Items added to '+tab.name);
+}
+function processCharge(){
+  const orderObj=orders['quick'];
+  const items=orderToItems(orderObj);
+  const total=getOrderTotal(orderObj);
+  items.forEach(i=>{const p=PRODUCTS.find(x=>x.name===i.name);if(p) stock[p.id]=Math.max(0,stock[p.id]-i.qty);});
+  transactions.unshift({id:Date.now(),time:new Date(),total,items,payment:confPayment,staff:currentStaff,type:'sale',voided:false});
+  closeOverlay('charge-overlay');
+  orders['quick']={};
+  renderOrder();renderProducts();updateLowStockBanner();
+  showToast('Sale recorded — '+fmt(total));
+}
+
+// ── VOID ──────────────────────────────────────────
+function voidTransaction(txId){
+  if(!confirm('Void this transaction? Stock will be restored.')) return;
+  const tx=transactions.find(t=>t.id===txId);
+  if(!tx||tx.voided) return;
+  tx.voided=true;
+  tx.voidedAt=new Date();
+  // restore stock
+  tx.items.forEach(i=>{const p=PRODUCTS.find(x=>x.name===i.name);if(p) stock[p.id]+=i.qty;});
+  renderSales();renderProducts();updateLowStockBanner();
+  showToast('Transaction voided — stock restored');
+}
+
+// ── TABS PANEL ────────────────────────────────────
+function renderTabsPanel(){
+  const el=document.getElementById('tabs-panel');
+  if(!openTabs.length){el.innerHTML='<div class="no-tabs">No open tabs</div>';return;}
+  el.innerHTML=openTabs.map(tab=>{
+    const total=tabTotal(tab);
+    const opened=tab.openedAt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    const staffNote=tab.staff?' · '+tab.staff:'';
+    return `<div class="open-tab-card">
+      <div class="otc-head"><span class="otc-name">${tab.name}</span><span class="otc-total">${fmt(total)}</span></div>
+      <div class="otc-meta">Opened ${opened}${staffNote} · ${tab.items.reduce((s,i)=>s+i.qty,0)} items</div>
+      <div class="otc-items">${tab.items.length?tab.items.map(i=>i.qty+'× '+i.name+' — '+fmt(i.price*i.qty)).join('\n'):'No items yet'}</div>
+      <div class="otc-btns">
+        <button class="otc-btn otc-btn-add" onclick="switchToTab('${tab.id}')">Add items</button>
+        <button class="otc-btn otc-btn-settle" onclick="settleTab('${tab.id}')">Settle</button>
+        <button class="otc-btn otc-btn-cancel" onclick="cancelTab('${tab.id}')">Cancel</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function switchToTab(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-till').classList.add('active');
+  document.querySelector('.nav-btn').classList.add('active');
+  switchOrder(id);
+}
+function settleTab(id){
+  const tab=openTabs.find(t=>t.id===id);
+  if(!tab) return;
+  settlingTabId=id;
+  settlePayment='cash';
+  document.getElementById('settle-amount').textContent=fmt(tabTotal(tab));
+  document.getElementById('settle-items').textContent=itemsText(tab.items);
+  document.getElementById('settle-cash-btn').classList.add('active');
+  document.getElementById('settle-card-btn').classList.remove('active');
+  document.getElementById('settle-account-btn').classList.remove('active');
+  document.getElementById('settle-overlay').classList.add('show');
+}
+function confirmSettle(){
+  const tab=openTabs.find(t=>t.id===settlingTabId);
+  if(!tab) return;
+  const total=tabTotal(tab);
+  transactions.unshift({id:Date.now(),time:new Date(),total,items:tab.items,payment:settlePayment,staff:currentStaff,type:'tab',tabName:tab.name,voided:false});
+  openTabs=openTabs.filter(t=>t.id!==settlingTabId);
+  delete orders[settlingTabId];
+  if(activeOrderKey===settlingTabId) switchOrder('quick');
+  closeOverlay('settle-overlay');renderTabsBar();renderTabsPanel();
+  showToast('Tab settled — '+fmt(total));
+}
+function cancelTab(id){
+  if(!confirm('Cancel this tab? Items will be discarded.')) return;
+  openTabs=openTabs.filter(t=>t.id!==id);
+  delete orders[id];
+  if(activeOrderKey===id) switchOrder('quick');
+  renderTabsBar();renderTabsPanel();
+  showToast('Tab cancelled');
+}
+
+// ── STOCK ─────────────────────────────────────────
+function renderStock(){
+  document.getElementById('stock-panel').innerHTML=PRODUCTS.map(p=>{
+    const s=stock[p.id];
+    const badge=s===0?'<span class="stock-badge badge-out">Out</span>':s<=5?'<span class="stock-badge badge-low">Low</span>':'<span class="stock-badge badge-ok">OK</span>';
+    return `<div class="stock-item">
+      <div class="si-info"><div class="si-name">${p.name}${badge}</div><div class="si-meta">${p.category} · ${fmt(p.price)}</div></div>
+      <div class="si-controls">
+        <button class="qty-btn" onclick="adjustStock(${p.id},-1)">−</button>
+        <span class="si-qty">${s}</span>
+        <button class="qty-btn" onclick="adjustStock(${p.id},1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function adjustStock(id,delta){stock[id]=Math.max(0,stock[id]+delta);renderStock();updateLowStockBanner();}
+
+// ── SALES ─────────────────────────────────────────
+function renderSales(){
+  const el=document.getElementById('sales-panel');
+  const live=transactions.filter(t=>!t.voided);
+  if(!transactions.length){el.innerHTML='<div class="no-tx">No sales yet</div>';return;}
+  const totalTakings=live.reduce((s,t)=>s+t.total,0);
+  const cashTotal=live.filter(t=>t.payment==='cash').reduce((s,t)=>s+t.total,0);
+  const cardTotal=live.filter(t=>t.payment==='card').reduce((s,t)=>s+t.total,0);
+  const accountTotal=live.filter(t=>t.payment==='account').reduce((s,t)=>s+t.total,0);
+  const totalItems=live.reduce((s,t)=>s+t.items.reduce((a,i)=>a+i.qty,0),0);
+  el.innerHTML=`<div class="stats-grid">
+    <div class="stat-card"><div class="sc-label">Total takings</div><div class="sc-value">${fmt(totalTakings)}</div></div>
+    <div class="stat-card"><div class="sc-label">Items sold</div><div class="sc-value">${totalItems}</div></div>
+    <div class="stat-card"><div class="sc-label">Cash</div><div class="sc-value">${fmt(cashTotal)}</div></div>
+    <div class="stat-card"><div class="sc-label">Card</div><div class="sc-value">${fmt(cardTotal)}</div></div>
+    ${accountTotal>0?`<div class="stat-card" style="grid-column:span 2"><div class="sc-label">On account</div><div class="sc-value">${fmt(accountTotal)}</div></div>`:''}
+  </div>`+transactions.map(tx=>{
+    const time=tx.time.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    const payBadge=tx.payment==='cash'?'<span class="tx-badge badge-cash">Cash</span>':tx.payment==='card'?'<span class="tx-badge badge-card">Card</span>':'<span class="tx-badge badge-account">Account</span>';
+    const typeBadge=tx.type==='tab'?`<span class="tx-badge badge-tab">Tab: ${tx.tabName}</span>`:'';
+    const voidBadge=tx.voided?'<span class="tx-badge badge-void">Voided</span>':'';
+    const staffNote=tx.staff?tx.staff+' · ':'';
+    const voidBtn=!tx.voided?`<button class="void-btn" onclick="voidTransaction(${tx.id})">Void</button>`:'';
+    return `<div class="tx-card${tx.voided?' tx-voided':''}">
+      <div class="tx-head"><span class="tx-time">${time}</span><span class="tx-total">${fmt(tx.total)}</span></div>
+      <div class="tx-meta">${staffNote}${payBadge}${typeBadge}${voidBadge}${voidBtn}</div>
+      <div class="tx-detail">${tx.items.map(i=>i.qty+'× '+i.name).join(', ')}</div>
+    </div>`;
+  }).join('')+`
+  <button class="report-btn" onclick="openReport()">📊 End of night report</button>
+  <button class="session-btn" onclick="if(confirm('Clear all sales data and start fresh?')){transactions=[];renderSales();}">Clear session data</button>`;
+}
+
+// ── END OF NIGHT REPORT ───────────────────────────
+function openReport(){
+  document.getElementById('report-date').textContent=new Date().toLocaleDateString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+' · Generated '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  renderReport();
+  document.getElementById('report-overlay').classList.add('show');
+}
+
+function renderReport(){
+  const float=parseFloat(document.getElementById('float-input').value)||0;
+  const live=transactions.filter(t=>!t.voided);
+  const voided=transactions.filter(t=>t.voided);
+
+  const totalTakings=live.reduce((s,t)=>s+t.total,0);
+  const cashTotal=live.filter(t=>t.payment==='cash').reduce((s,t)=>s+t.total,0);
+  const cardTotal=live.filter(t=>t.payment==='card').reduce((s,t)=>s+t.total,0);
+  const accountTotal=live.filter(t=>t.payment==='account').reduce((s,t)=>s+t.total,0);
+  const cashInTill=cashTotal+float;
+  const totalItems=live.reduce((s,t)=>s+t.items.reduce((a,i)=>a+i.qty,0),0);
+  const txCount=live.length;
+
+  // popularity
+  const popularity={};
+  live.forEach(t=>t.items.forEach(i=>{popularity[i.name]=(popularity[i.name]||0)+i.qty;}));
+  const popSorted=Object.entries(popularity).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxQty=popSorted[0]?popSorted[0][1]:1;
+
+  // per staff
+  const staffMap={};
+  live.forEach(t=>{
+    const s=t.staff||'Unassigned';
+    if(!staffMap[s]) staffMap[s]={total:0,count:0};
+    staffMap[s].total+=t.total;staffMap[s].count++;
+  });
+
+  // tabs settled
+  const tabTx=live.filter(t=>t.type==='tab');
+
+  document.getElementById('report-body').innerHTML=`
+    <div class="report-section">
+      <h3>Takings summary</h3>
+      <div class="report-row"><span>Total transactions</span><span>${txCount}</span></div>
+      <div class="report-row"><span>Total items sold</span><span>${totalItems}</span></div>
+      <div class="report-row"><span>Cash sales</span><span>${fmt(cashTotal)}</span></div>
+      <div class="report-row"><span>Card sales</span><span>${fmt(cardTotal)}</span></div>
+      ${accountTotal>0?`<div class="report-row"><span>On account</span><span>${fmt(accountTotal)}</span></div>`:''}
+      <div class="report-row total"><span>Total takings</span><span>${fmt(totalTakings)}</span></div>
+    </div>
+
+    <div class="report-section">
+      <h3>Cash reconciliation</h3>
+      <div class="report-row"><span>Cash sales</span><span>${fmt(cashTotal)}</span></div>
+      <div class="report-row"><span>Starting float</span><span>${fmt(float)}</span></div>
+      <div class="report-row total highlight"><span>Expected cash in till</span><span>${fmt(cashInTill)}</span></div>
+      <div class="report-row"><span>Cash to bank (less float)</span><span>${fmt(cashTotal)}</span></div>
+    </div>
+
+    ${popSorted.length?`<div class="report-section">
+      <h3>Top sellers</h3>
+      ${popSorted.map((([name,qty],i)=>`<div class="pop-item">
+        <span class="pop-rank">${i+1}</span>
+        <span style="flex:1;padding:0 10px;">${name}</span>
+        <span style="color:#aaa;font-size:12px;min-width:60px;text-align:right">${qty} sold</span>
+      </div>
+      <div class="pop-bar" style="width:${Math.round(qty/maxQty*100)}%;margin-left:24px;margin-bottom:4px;"></div>`)).join('')}
+    </div>`:''}
+
+    ${Object.keys(staffMap).length?`<div class="report-section">
+      <h3>By staff</h3>
+      ${Object.entries(staffMap).map(([name,data])=>`<div class="report-row"><span>${name}</span><span>${fmt(data.total)} (${data.count} sales)</span></div>`).join('')}
+    </div>`:''}
+
+    ${tabTx.length?`<div class="report-section">
+      <h3>Tabs settled</h3>
+      ${tabTx.map(t=>`<div class="report-row"><span>${t.tabName}</span><span>${fmt(t.total)}</span></div>`).join('')}
+    </div>`:''}
+
+    ${voided.length?`<div class="report-section">
+      <h3>Voided transactions</h3>
+      ${voided.map(t=>`<div class="report-row" style="color:#c0392b"><span>${t.time.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} — ${t.items.map(i=>i.qty+'× '+i.name).join(', ')}</span><span>${fmt(t.total)}</span></div>`).join('')}
+    </div>`:''}
+  `;
+}
+
+// ── OVERLAYS ──────────────────────────────────────
+function closeOverlay(id){document.getElementById(id).classList.remove('show');}
+
+// ── TOAST ─────────────────────────────────────────
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+// ── CLOCK ─────────────────────────────────────────
+function updateClock(){
+  document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+
+// ── INIT ──────────────────────────────────────────
+renderProducts();
+renderOrder();
+renderTabsBar();
+renderCatToggles();
+updateClock();
+setInterval(updateClock,15000);
+setTimeout(()=>openStaffOverlay(),300);
+</script>
+</body>
+</html>

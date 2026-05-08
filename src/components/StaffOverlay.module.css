@@ -1,0 +1,244 @@
+.screen {
+  position: fixed;
+  inset: 0;
+  background: var(--navy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 400;
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: var(--white);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 20px 70px rgba(0,0,0,0.28);
+}
+
+.closeBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+
+.brand { padding: 10px 4px 14px; }
+.appName { font-size: 18px; font-weight: 800; color: var(--text); }
+.tagline { margin-top: 2px; font-size: 12px; color: var(--muted); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 6px 0 14px;
+}
+
+.staffBtn {
+  padding: 14px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+  transition: transform 0.08s, border-color 0.12s;
+}
+.staffBtn:active { transform: scale(0.98); }
+.staffBtnSelected { border-color: var(--accent); }
+
+.adminBtn {
+  width: 100%;
+  padding: 12px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: #f7fbfd;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* PIN */
+.pinHeader {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.backBtn {
+  justify-self: start;
+  border: none;
+  background: none;
+  color: var(--accent-dark);
+  font-weight: 700;
+  padding: 8px 6px;
+}
+.pinTitle { font-weight: 800; color: var(--text); }
+.pinSpacer { justify-self: end; }
+
+.dots {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 12px 0 8px;
+}
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #d0d8dd;
+  background: transparent;
+}
+.dotFilled {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.error {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+.hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.numpad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.npBtn {
+  padding: 14px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--white);
+  font-size: 16px;
+  font-weight: 750;
+  color: var(--text);
+}
+.npBtn:active { background: #f2f7fa; }
+.npGhost {
+  font-size: 12px;
+  font-weight: 750;
+  color: var(--accent-dark);
+  background: #f7fbfd;
+}
+
+/* Admin */
+.adminWrap { padding-top: 4px; }
+.adminHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.adminTitle { font-weight: 900; color: var(--text); }
+.doneBtn {
+  border: none;
+  background: none;
+  color: var(--accent-dark);
+  font-weight: 850;
+  padding: 8px 6px;
+}
+.adminMsg {
+  background: #f7fbfd;
+  border: 1px solid #d9eef6;
+  color: var(--text);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+.section { margin-top: 12px; }
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 850;
+  color: var(--muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-bottom: 10px; }
+.input {
+  padding: 12px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  outline: none;
+}
+.input:focus { border-color: var(--accent); }
+
+.primaryBtn {
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--accent);
+  color: var(--white);
+  font-weight: 850;
+  font-size: 14px;
+}
+.primaryBtn:active { background: var(--accent-dark); }
+
+.staffList { display: grid; gap: 10px; }
+.staffRow {
+  display: grid;
+  grid-template-columns: 1fr 120px auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.staffName { font-weight: 750; color: var(--text); font-size: 13px; }
+.pinInput {
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+.pinInput:focus { border-color: var(--accent); }
+
+.smallBtn {
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: var(--white);
+  font-weight: 850;
+  font-size: 12px;
+}
+.smallBtnGhost {
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--red);
+  font-weight: 850;
+  font-size: 12px;
+}

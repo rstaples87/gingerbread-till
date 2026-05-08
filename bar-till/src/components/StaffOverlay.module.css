@@ -1,0 +1,40 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+}
+.sheet {
+  background: #fff;
+  width: 90%;
+  max-width: 340px;
+  border-radius: 16px;
+  padding: 22px 18px 24px;
+}
+.title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+.sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+.grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 14px; }
+.btn {
+  padding: 14px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  background: #fff;
+  transition: all 0.12s;
+}
+.btn:hover { border-color: var(--navy); }
+.selected { background: var(--navy); color: #fff; border-color: var(--navy); }
+.addBtn {
+  width: 100%;
+  padding: 11px;
+  border: 1px dashed #ccc;
+  border-radius: var(--radius);
+  background: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.addBtn:hover { border-color: var(--navy); color: var(--navy); }

@@ -1,0 +1,77 @@
+.wrap { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.scroll { flex: 1; overflow-y: auto; padding: 12px; }
+.empty { text-align: center; padding: 40px 20px; color: #ccc; font-size: 14px; }
+
+.statsGrid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 12px; }
+.statCard { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 13px; }
+.span2 { grid-column: span 2; }
+.scLabel { font-size: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+.scValue { font-size: 20px; font-weight: 700; color: var(--navy); }
+
+.txCard { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 13px; margin-bottom: 7px; }
+.txVoided { opacity: 0.45; }
+.txHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+.txTime { font-size: 11px; color: #bbb; }
+.txTotal { font-size: 14px; font-weight: 700; color: var(--navy); }
+.txMeta { font-size: 11px; color: #bbb; margin-bottom: 3px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.txDetail { font-size: 11px; color: #aaa; line-height: 1.6; }
+.badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+.badgeCash { background: #eafbee; color: #1e7e34; }
+.badgeCard { background: #e8eef8; color: #1a5ca8; }
+.badgeAccount { background: #fff8e1; color: #b45309; }
+.badgeTab { background: #f5f0fb; color: #7c3aed; }
+.badgeVoid { background: #fdf0ee; color: var(--red); }
+.voidBtn { font-size: 10px; color: var(--red); border: none; background: none; padding: 0; margin-left: auto; }
+.voidBtn:hover { text-decoration: underline; }
+
+.reportBtn {
+  width: 100%; padding: 11px; background: var(--navy); border: none;
+  border-radius: var(--radius); font-size: 13px; color: #fff; font-weight: 600; margin-top: 8px;
+}
+.sessionBtn {
+  width: 100%; padding: 11px; background: var(--white);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 13px; color: var(--red); margin-top: 6px;
+}
+
+/* Report */
+.reportOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: flex-start; justify-content: center;
+  z-index: 500; padding-top: 20px;
+}
+.reportSheet {
+  background: var(--white); width: 95%; max-width: 520px;
+  border-radius: 16px; padding: 22px 18px 28px;
+  max-height: 90vh; overflow-y: auto;
+}
+.reportHeader { text-align: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--navy); }
+.reportHeader h2 { font-size: 20px; font-weight: 700; color: var(--navy); }
+.reportHeader p { font-size: 12px; color: #aaa; margin-top: 4px; }
+.reportSection { margin-bottom: 18px; }
+.reportSection h3 { font-size: 12px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.reportRow { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #f5f5f5; font-size: 14px; }
+.reportRow:last-child { border-bottom: none; }
+.reportTotal { font-weight: 700; font-size: 16px; color: var(--navy); border-top: 2px solid var(--navy); padding-top: 10px; margin-top: 4px; }
+.reportHighlight { background: #f8f9ff; margin: 0 -4px; padding: 7px 4px; border-radius: 6px; }
+.reportVoided { color: var(--red); }
+.floatRow { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 14px; color: #555; }
+.floatInput { flex: 1; padding: 10px 14px; border: 1px solid #e0e0e0; border-radius: 9px; font-size: 16px; font-weight: 600; outline: none; text-align: right; }
+.floatInput:focus { border-color: var(--navy); }
+.popItem { display: flex; align-items: center; padding: 5px 0; font-size: 13px; border-bottom: 1px solid #f5f5f5; }
+.popRank { color: #aaa; font-size: 11px; min-width: 20px; }
+.popBar { height: 6px; background: var(--navy); border-radius: 3px; margin: 2px 0 4px 24px; }
+.printBtn {
+  width: 100%; padding: 11px; background: var(--white); border: 1px solid var(--navy);
+  border-radius: var(--radius); font-size: 14px; font-weight: 500; color: var(--navy); margin-bottom: 8px;
+}
+.closeBtn {
+  width: 100%; padding: 13px; background: var(--navy); color: #fff; border: none;
+  border-radius: var(--radius); font-size: 14px; font-weight: 600;
+}
+
+@media print {
+  .reportOverlay { position: static; padding: 0; background: none; }
+  .reportSheet { max-height: none; border-radius: 0; width: 100%; }
+  .printBtn, .closeBtn { display: none; }
+}
