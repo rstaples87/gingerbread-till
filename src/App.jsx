@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import { INITIAL_PRODUCTS, INITIAL_STAFF, STOCK_ITEMS, PRODUCT_VARIANTS, DEFAULT_TAB_LIMIT } from './data'
 import { supabase } from './supabase'
@@ -12,6 +12,63 @@ import StaffLog from './components/StaffLog'
 import Sales from './components/Sales'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
+
+async function seedSupabase() {
+  if (!supabase) return
+  try {
+    const { data: staffSample } = await supabase.from('staff').select('id').limit(1)
+    if (!staffSample?.length && INITIAL_STAFF.length > 0) {
+      await supabase.from('staff').insert(
+        INITIAL_STAFF.map(s => ({
+          name: s.name,
+          pin: s.pin ?? '0000',
+          role: s.role ?? 'staff',
+        })),
+      )
+    }
+    const { data: stockSample } = await supabase.from('stock_items').select('stock_key').limit(1)
+    if (!stockSample?.length) {
+      await supabase.from('stock_items').insert(
+        STOCK_ITEMS.map(s => ({ stock_key: s.id, qty: s.stock ?? 0 })),
+      )
+    }
+  } catch (err) {
+    console.warn('Supabase seed failed:', err?.message || err)
+  }
+}
+
+/** Upsert warehouse stock map — fire-and-forget */
+function syncStockToSupabase(map) {
+  if (!supabase || !map) return
+  const rows = Object.entries(map).map(([stock_key, qty]) => ({
+    stock_key,
+    qty: Number(qty),
+  }))
+  supabase
+    .from('stock_items')
+    .upsert(rows, { onConflict: 'stock_key' })
+    .then(({ error }) => {
+      if (error) console.warn('Stock sync failed:', error.message)
+    })
+}
+
+async function loadStockFromSupabase(setStockItemsRaw) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase.from('stock_items').select('stock_key, qty')
+    if (error) throw error
+    if (!data?.length) return
+    setStockItemsRaw(prev => {
+      const next = { ...prev }
+      for (const row of data) {
+        next[row.stock_key] = Number(row.qty)
+      }
+      return next
+    })
+  } catch (err) {
+    console.warn('loadStockFromSupabase failed:', err?.message || err)
+  }
+}
 
 function syncTransactionToSupabase(tx) {
   if (!supabase) return
@@ -52,7 +109,16 @@ export default function App() {
   const [view, setView] = useState('till')
   const [products, setProducts] = useLocalStorage('bt_products', INITIAL_PRODUCTS)
   const [stock, setStock] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
-  const [stockItems, setStockItems] = useLocalStorage('bt_stock_items', Object.fromEntries(STOCK_ITEMS.map(s => [s.id, s.stock])))
+  const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(STOCK_ITEMS.map(s => [s.id, s.stock])))
+  const stockSyncReadyRef = useRef(false)
+
+  const setStockItems = useCallback((update) => {
+    setStockItemsRaw(prev => {
+      const next = typeof update === 'function' ? update(prev) : update
+      if (stockSyncReadyRef.current) syncStockToSupabase(next)
+      return next
+    })
+  }, [])
   const [staff, setStaff] = useLocalStorage('bt_staff', INITIAL_STAFF)
   const [currentStaff, setCurrentStaff] = useLocalStorage('bt_current_staff', null)
   const [transactions, setTransactions] = useLocalStorage('bt_transactions', [])
@@ -76,6 +142,17 @@ export default function App() {
 
   useEffect(() => {
     setTimeout(() => setStaffOverlayOpen(true), 300)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      await seedSupabase()
+      if (cancelled) return
+      await loadStockFromSupabase(setStockItemsRaw)
+      stockSyncReadyRef.current = true
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // Migrate legacy staff storage: ["Alice", "Ben"] -> [{ name, pin, role }]
