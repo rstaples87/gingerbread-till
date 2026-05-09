@@ -70,6 +70,39 @@ async function loadStockFromSupabase(setStockItemsRaw) {
   }
 }
 
+/** Till menu product stock — fire-and-forget */
+function syncTillStockToSupabase(map) {
+  if (!supabase || !map) return
+  const rows = Object.entries(map).map(([product_id, qty]) => ({
+    product_id: Number(product_id),
+    qty: Number(qty),
+  }))
+  supabase
+    .from('till_stock')
+    .upsert(rows, { onConflict: 'product_id' })
+    .then(({ error }) => {
+      if (error) console.warn('Till stock sync failed:', error.message)
+    })
+}
+
+async function loadTillStockFromSupabase(setStockRaw) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase.from('till_stock').select('product_id, qty')
+    if (error) throw error
+    if (!data?.length) return
+    setStockRaw(prev => {
+      const next = { ...prev }
+      for (const row of data) {
+        next[row.product_id] = Number(row.qty)
+      }
+      return next
+    })
+  } catch (err) {
+    console.warn('loadTillStockFromSupabase failed:', err?.message || err)
+  }
+}
+
 function syncTransactionToSupabase(tx) {
   if (!supabase) return
 
@@ -108,9 +141,17 @@ function syncTransactionToSupabase(tx) {
 export default function App() {
   const [view, setView] = useState('till')
   const [products, setProducts] = useLocalStorage('bt_products', INITIAL_PRODUCTS)
-  const [stock, setStock] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
+  const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(STOCK_ITEMS.map(s => [s.id, s.stock])))
   const stockSyncReadyRef = useRef(false)
+
+  const setStock = useCallback((update) => {
+    setStockRaw(prev => {
+      const next = typeof update === 'function' ? update(prev) : update
+      if (stockSyncReadyRef.current) syncTillStockToSupabase(next)
+      return next
+    })
+  }, [])
 
   const setStockItems = useCallback((update) => {
     setStockItemsRaw(prev => {
@@ -150,6 +191,8 @@ export default function App() {
       await seedSupabase()
       if (cancelled) return
       await loadStockFromSupabase(setStockItemsRaw)
+      if (cancelled) return
+      await loadTillStockFromSupabase(setStockRaw)
       stockSyncReadyRef.current = true
     })()
     return () => { cancelled = true }
