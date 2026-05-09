@@ -77,7 +77,6 @@ function syncTillStockToSupabase(map) {
     product_id: Number(product_id),
     qty: Number(qty),
   }))
-  console.log('Syncing till stock to Supabase:', rows)
   supabase
     .from('till_stock')
     .upsert(rows, { onConflict: 'product_id' })
