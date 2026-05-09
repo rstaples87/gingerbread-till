@@ -5,4 +5,4 @@ const key = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = url && key ? createClient(url, key) : null
 
-console.log('Supabase client:', url ? 'connected' : 'null - missing env vars')
+console.log(url && key ? 'Supabase client: connected' : 'Supabase client: null - missing env vars')
