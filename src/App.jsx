@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import { INITIAL_PRODUCTS, INITIAL_STAFF, STOCK_ITEMS, PRODUCT_VARIANTS, DEFAULT_TAB_LIMIT } from './data'
+import { supabase } from './supabase'
 import { fmt, getOrderTotal, orderToItems, tabTotal, mixerBottleDeductionForLine } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
@@ -11,6 +12,41 @@ import StaffLog from './components/StaffLog'
 import Sales from './components/Sales'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
+
+function syncTransactionToSupabase(tx) {
+  if (!supabase) return
+
+  const time =
+    tx.time instanceof Date ? tx.time.toISOString()
+      : tx.time ?? null
+
+  const voided_at = tx.voidedAt
+    ? (tx.voidedAt instanceof Date ? tx.voidedAt.toISOString() : tx.voidedAt)
+    : null
+
+  /** Keys match Supabase `transactions` columns exactly */
+  const row = {
+    id: tx.id,
+    time,
+    total: tx.total,
+    items: tx.items ?? [],
+    payment: tx.payment ?? null,
+    staff_name: tx.staff ?? null,
+    type: tx.type ?? null,
+    tab_name: tx.tabName ?? null,
+    voided: Boolean(tx.voided),
+    voided_at,
+    tendered_amount: tx.tenderedAmount ?? null,
+    change_given: tx.changeGiven ?? null,
+  }
+
+  supabase
+    .from('transactions')
+    .upsert(row, { onConflict: 'id' })
+    .then(({ error }) => {
+      if (error) console.warn('TX sync failed:', error.message)
+    })
+}
 
 export default function App() {
   const [view, setView] = useState('till')
@@ -223,7 +259,7 @@ export default function App() {
         }
       }
     })
-    addTransaction({
+    const tx = {
       id: Date.now(),
       time: new Date(),
       total,
@@ -236,7 +272,9 @@ export default function App() {
         tenderedAmount: extras.tenderedAmount ?? null,
         changeGiven: extras.changeGiven ?? null,
       } : {}),
-    })
+    }
+    addTransaction(tx)
+    syncTransactionToSupabase(tx)
     clearOrder('quick')
     showToast('Sale recorded — ' + fmt(total))
   }, [orders, products, addTransaction, activeSaleStaff, setStock, setStockItems, clearOrder, showToast])
