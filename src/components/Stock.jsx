@@ -13,7 +13,7 @@ function getPortionLabel(product) {
   return product.portionSize >= 100 ? 'glasses' : 'measures'
 }
 
-export default function Stock({ products, stock, updateStock, stockItems, setStockItems, stockDefinitions }) {
+export default function Stock({ products, stock, updateStock, stockItems, setStockItems, stockDefinitions, stockCategories }) {
   const [tab, setTab] = useState('till')
 
   const changeStockItem = (id, delta) => {
@@ -63,7 +63,7 @@ export default function Stock({ products, stock, updateStock, stockItems, setSto
           )
         })}
 
-        {tab === 'take' && STOCK_CATS.map(cat => {
+        {tab === 'take' && (stockCategories?.length ? stockCategories : STOCK_CATS).map(cat => {
           const items = stockDefinitions.filter(i => i.category === cat)
           if (!items.length) return null
           return (

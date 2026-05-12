@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocalStorage } from './useLocalStorage'
-import { INITIAL_PRODUCTS, INITIAL_STAFF, STOCK_ITEMS as INITIAL_STOCK_ITEMS, PRODUCT_VARIANTS as INITIAL_PRODUCT_VARIANTS, DEFAULT_TAB_LIMIT } from './data'
+import {
+  INITIAL_PRODUCTS,
+  INITIAL_STAFF,
+  STOCK_ITEMS as INITIAL_STOCK_ITEMS,
+  PRODUCT_VARIANTS as INITIAL_PRODUCT_VARIANTS,
+  DEFAULT_TAB_LIMIT,
+  CATEGORIES as DEFAULT_TILL_CATEGORIES,
+  STOCK_CATEGORIES as DEFAULT_STOCK_CATEGORIES,
+} from './data'
 import { supabase } from './supabase'
 import { fmt, getOrderTotal, orderToItems, tabTotal, mixerBottleDeductionForLine } from './utils'
 import Header from './components/Header'
@@ -136,6 +144,10 @@ function normaliseStockDefinitionRow(row, fallback) {
   }
 }
 
+function uniqueNonEmpty(items) {
+  return Array.from(new Set(items.map(item => String(item || '').trim()).filter(Boolean)))
+}
+
 async function seedSupabase() {
   if (!supabase) return
   try {
@@ -192,6 +204,39 @@ async function loadProductsFromSupabase(setProducts, setProductVariants) {
   } catch (err) {
     console.warn('loadProductsFromSupabase failed:', err?.message || err)
   }
+}
+
+async function loadCategoriesFromSupabase(setCategoryState) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('name, type')
+      .order('created_at')
+    if (error) throw error
+    if (!data?.length) return
+    setCategoryState(prev => ({
+      till: uniqueNonEmpty([
+        ...(prev?.till || []),
+        ...data.filter(row => row.type === 'till').map(row => row.name),
+      ]),
+      stock: uniqueNonEmpty([
+        ...(prev?.stock || []),
+        ...data.filter(row => row.type === 'stock').map(row => row.name),
+      ]),
+    }))
+  } catch (err) {
+    console.warn('loadCategoriesFromSupabase failed:', err?.message || err)
+  }
+}
+
+async function saveCategoryToSupabase(type, name) {
+  if (!supabase) return
+  const { error } = await supabase.from('categories').insert({
+    name,
+    type,
+  })
+  if (error) throw error
 }
 
 /** Upsert warehouse stock map — fire-and-forget */
@@ -373,6 +418,7 @@ export default function App() {
   const [products, setProducts] = useLocalStorage('bt_products', INITIAL_PRODUCTS)
   const [productVariants, setProductVariants] = useLocalStorage('bt_product_variants', INITIAL_PRODUCT_VARIANTS)
   const [stockDefinitions, setStockDefinitions] = useLocalStorage('bt_stock_definitions', INITIAL_STOCK_ITEMS)
+  const [categoryState, setCategoryState] = useLocalStorage('bt_categories', { till: [], stock: [] })
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
   const stockSyncReadyRef = useRef(false)
@@ -404,6 +450,16 @@ export default function App() {
   const [toast, setToast] = useState({ msg: '', visible: false })
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const mixerStockIds = stockDefinitions.filter(item => item.category === 'Mixers').map(item => item.id)
+  const tillCategories = uniqueNonEmpty([
+    ...DEFAULT_TILL_CATEGORIES,
+    ...(categoryState?.till || []),
+    ...products.map(product => product.category),
+  ])
+  const stockCategories = uniqueNonEmpty([
+    ...DEFAULT_STOCK_CATEGORIES,
+    ...(categoryState?.stock || []),
+    ...stockDefinitions.map(item => item.category),
+  ])
 
   // Restore Date objects from localStorage (they're serialised as strings)
   const hydratedTabs = openTabs.map(t => ({ ...t, openedAt: new Date(t.openedAt) }))
@@ -422,6 +478,8 @@ export default function App() {
     let cancelled = false
     ;(async () => {
       await seedSupabase()
+      if (cancelled) return
+      await loadCategoriesFromSupabase(setCategoryState)
       if (cancelled) return
       await loadProductsFromSupabase(setProducts, setProductVariants)
       if (cancelled) return
@@ -865,6 +923,23 @@ export default function App() {
     showToast('Stock item deleted')
   }, [productVariants, setStockDefinitions, setStockItems, setProductVariants, showToast])
 
+  const saveCategory = useCallback((type, rawName) => {
+    const name = String(rawName || '').trim()
+    if (!name || !['till', 'stock'].includes(type)) return ''
+    const currentCategories = type === 'till' ? tillCategories : stockCategories
+    if (currentCategories.some(category => category.toLowerCase() === name.toLowerCase())) {
+      return currentCategories.find(category => category.toLowerCase() === name.toLowerCase()) || name
+    }
+    setCategoryState(prev => ({
+      till: type === 'till' ? uniqueNonEmpty([...(prev?.till || []), name]) : (prev?.till || []),
+      stock: type === 'stock' ? uniqueNonEmpty([...(prev?.stock || []), name]) : (prev?.stock || []),
+    }))
+    saveCategoryToSupabase(type, name)
+      .catch(err => console.warn('saveCategory failed:', err?.message || err))
+    showToast('Category added')
+    return name
+  }, [setCategoryState, showToast, stockCategories, tillCategories])
+
   const clockInStaff = useCallback((staffName) => {
     if (!staffName) return
     setCurrentlyIn(prev => {
@@ -888,6 +963,8 @@ export default function App() {
     stock, updateStock, setStockValue,
     stockItems, setStockItems,
     stockDefinitions, setStockDefinitions,
+    tillCategories,
+    stockCategories,
     mixerStockIds,
     staff, setStaff,
     currentStaff, setCurrentStaff,
@@ -903,6 +980,7 @@ export default function App() {
     processCharge, voidTransaction, mergeOrderToTab,
     saveProduct, deleteProduct,
     saveStockDefinition, deleteStockDefinition,
+    saveCategory,
     showToast,
   }
 

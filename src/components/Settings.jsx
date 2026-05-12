@@ -1,16 +1,18 @@
 import { useState } from 'react'
-import { CATEGORIES } from '../data'
+import { CATEGORIES, STOCK_CATEGORIES } from '../data'
 import { fmt } from '../utils'
 import styles from './Settings.module.css'
 
-const STOCK_CATEGORIES = ['Lager', 'Ale', '0% Beer', 'Cider', 'House Spirits', 'Premium Spirits', 'Other Spirits', 'Wine', 'Soft Drinks', 'Mixers']
 const STOCK_UNITS = ['bottle', 'can', 'carton']
+const ADD_CATEGORY = '__add_category__'
 
 const blankProductForm = {
   id: null,
   name: '',
   price: '',
   category: CATEGORIES[0],
+  categoryMode: 'select',
+  categoryDraft: '',
   variantType: 'none',
   label: '',
   stockIds: [],
@@ -22,6 +24,8 @@ const blankStockForm = {
   id: null,
   name: '',
   category: STOCK_CATEGORIES[0],
+  categoryMode: 'select',
+  categoryDraft: '',
   unit: STOCK_UNITS[0],
   bottleYield: '',
   displayUnit: '',
@@ -56,6 +60,8 @@ function productToForm(product, variant, defaultMixerIds) {
     name: product.name,
     price: product.price,
     category: product.category,
+    categoryMode: 'select',
+    categoryDraft: '',
     variantType: getVariantType(variant),
     label: variant?.label || '',
     stockIds: mainStockIds,
@@ -70,6 +76,8 @@ function stockItemToForm(item) {
     id: item.id,
     name: item.name,
     category: item.category,
+    categoryMode: 'select',
+    categoryDraft: '',
     unit: item.unit || STOCK_UNITS[0],
     bottleYield: item.bottleYield ?? '',
     displayUnit: item.displayUnit || '',
@@ -99,31 +107,68 @@ function MultiSelect({ label, value, options, onChange }) {
   )
 }
 
+function CategoryField({ label, value, mode, draft, categories, onChange, onCustomChange, onCancelCustom }) {
+  if (mode === 'custom') {
+    return (
+      <label className={styles.field}>
+        <span>{label}</span>
+        <div className={styles.categoryInputRow}>
+          <input
+            value={draft}
+            placeholder="New category name"
+            onChange={event => onCustomChange(event.target.value)}
+            autoFocus
+          />
+          <button type="button" className={styles.linkBtn} onClick={onCancelCustom}>Cancel</button>
+        </div>
+      </label>
+    )
+  }
+
+  return (
+    <label className={styles.field}>
+      <span>{label}</span>
+      <select
+        value={value}
+        onChange={(event) => {
+          if (event.target.value === ADD_CATEGORY) {
+            onCustomChange('')
+            return
+          }
+          onChange(event.target.value)
+        }}
+      >
+        {categories.map(category => <option key={category} value={category}>{category}</option>)}
+        <option value={ADD_CATEGORY}>Add new category...</option>
+      </select>
+    </label>
+  )
+}
+
 export default function Settings({
   products,
   productVariants,
   stockDefinitions,
+  tillCategories,
+  stockCategories,
   mixerStockIds,
   saveProduct,
   deleteProduct,
   saveStockDefinition,
   deleteStockDefinition,
+  saveCategory,
 }) {
   const [tab, setTab] = useState('products')
   const [productForm, setProductForm] = useState(null)
   const [stockForm, setStockForm] = useState(null)
 
   const mixerOptions = stockDefinitions.filter(item => mixerStockIds.includes(item.id))
-  const productGroups = CATEGORIES.map(category => ({
+  const productGroups = tillCategories.map(category => ({
     category,
     items: products.filter(product => product.category === category),
   })).filter(group => group.items.length)
 
-  const stockCategoryOrder = [
-    ...STOCK_CATEGORIES,
-    ...stockDefinitions.map(item => item.category).filter(category => !STOCK_CATEGORIES.includes(category)),
-  ]
-  const stockGroups = Array.from(new Set(stockCategoryOrder)).map(category => ({
+  const stockGroups = stockCategories.map(category => ({
     category,
     items: stockDefinitions.filter(item => item.category === category),
   })).filter(group => group.items.length)
@@ -132,21 +177,28 @@ export default function Settings({
     setProductForm({
       ...blankProductForm,
       id: nextProductId(products),
+      category: tillCategories[0] || CATEGORIES[0],
       mixerStockIds,
     })
   }
 
   const submitProduct = (event) => {
     event.preventDefault()
+    const categoryInput = productForm.categoryMode === 'custom'
+      ? productForm.categoryDraft.trim()
+      : productForm.category
     const product = {
       ...(productForm.originalProduct || {}),
       id: productForm.id,
       name: productForm.name.trim(),
       price: Number(productForm.price),
-      category: productForm.category,
+      category: categoryInput,
       stock: productForm.originalProduct?.stock ?? 0,
     }
-    if (!product.name || Number.isNaN(product.price)) return
+    if (!product.name || !product.category || Number.isNaN(product.price)) return
+    if (productForm.categoryMode === 'custom') {
+      product.category = saveCategory('till', product.category)
+    }
 
     const variant = productForm.variantType === 'none'
       ? null
@@ -173,21 +225,28 @@ export default function Settings({
     setStockForm({
       ...blankStockForm,
       id: nextStockId(stockDefinitions),
+      category: stockCategories[0] || STOCK_CATEGORIES[0],
     })
   }
 
   const submitStockItem = (event) => {
     event.preventDefault()
+    const categoryInput = stockForm.categoryMode === 'custom'
+      ? stockForm.categoryDraft.trim()
+      : stockForm.category
     const item = {
       id: stockForm.id,
       name: stockForm.name.trim(),
-      category: stockForm.category,
+      category: categoryInput,
       unit: stockForm.unit,
       stock: 0,
       bottleYield: stockForm.bottleYield === '' ? undefined : Number(stockForm.bottleYield),
       displayUnit: stockForm.displayUnit.trim() || undefined,
     }
-    if (!item.name || Number.isNaN(item.bottleYield)) return
+    if (!item.name || !item.category || Number.isNaN(item.bottleYield)) return
+    if (stockForm.categoryMode === 'custom') {
+      item.category = saveCategory('stock', item.category)
+    }
     saveStockDefinition(item)
     setStockForm(null)
   }
@@ -308,12 +367,21 @@ export default function Settings({
               <span>Price</span>
               <input type="number" min="0" step="0.01" value={productForm.price} onChange={event => setProductForm(form => ({ ...form, price: event.target.value }))} />
             </label>
-            <label className={styles.field}>
-              <span>Category</span>
-              <select value={productForm.category} onChange={event => setProductForm(form => ({ ...form, category: event.target.value }))}>
-                {CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
-              </select>
-            </label>
+            <CategoryField
+              label="Category"
+              value={productForm.category}
+              mode={productForm.categoryMode}
+              draft={productForm.categoryDraft}
+              categories={tillCategories}
+              onChange={category => setProductForm(form => ({ ...form, category }))}
+              onCustomChange={categoryDraft => setProductForm(form => ({ ...form, categoryMode: 'custom', categoryDraft }))}
+              onCancelCustom={() => setProductForm(form => ({
+                ...form,
+                categoryMode: 'select',
+                categoryDraft: '',
+                category: form.category || tillCategories[0] || CATEGORIES[0],
+              }))}
+            />
             <label className={styles.field}>
               <span>Variant type</span>
               <select value={productForm.variantType} onChange={event => setProductForm(form => ({ ...form, variantType: event.target.value }))}>
@@ -367,12 +435,21 @@ export default function Settings({
               <span>Name</span>
               <input value={stockForm.name} onChange={event => setStockForm(form => ({ ...form, name: event.target.value }))} />
             </label>
-            <label className={styles.field}>
-              <span>Category</span>
-              <select value={stockForm.category} onChange={event => setStockForm(form => ({ ...form, category: event.target.value }))}>
-                {STOCK_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
-              </select>
-            </label>
+            <CategoryField
+              label="Category"
+              value={stockForm.category}
+              mode={stockForm.categoryMode}
+              draft={stockForm.categoryDraft}
+              categories={stockCategories}
+              onChange={category => setStockForm(form => ({ ...form, category }))}
+              onCustomChange={categoryDraft => setStockForm(form => ({ ...form, categoryMode: 'custom', categoryDraft }))}
+              onCancelCustom={() => setStockForm(form => ({
+                ...form,
+                categoryMode: 'select',
+                categoryDraft: '',
+                category: form.category || stockCategories[0] || STOCK_CATEGORIES[0],
+              }))}
+            />
             <label className={styles.field}>
               <span>Unit</span>
               <select value={stockForm.unit} onChange={event => setStockForm(form => ({ ...form, unit: event.target.value }))}>

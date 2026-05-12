@@ -110,6 +110,21 @@
 .multiSelect {
   min-height: 150px;
 }
+.categoryInputRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.linkBtn {
+  border: none;
+  background: none;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 8px 2px;
+}
 .sheetBtns {
   display: grid;
   grid-template-columns: 1fr 1fr;

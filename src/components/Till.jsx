@@ -13,7 +13,7 @@ function mixerChoiceLabel(stockItemName) {
 }
 
 export default function Till({
-  products, productVariants, stock, stockItems, stockDefinitions, mixerStockIds,
+  products, productVariants, stock, stockItems, stockDefinitions, mixerStockIds, tillCategories,
   orders, updateOrder, clearOrder, activeOrderKey, switchOrder,
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
   processCharge, showToast,
@@ -31,6 +31,7 @@ export default function Till({
   const stockItemById = Object.fromEntries(stockDefinitions.map(i => [i.id, i]))
 
   const order = orders[activeOrderKey] || {}
+  const categories = tillCategories?.length ? tillCategories : CATEGORIES
   const isTab = activeOrderKey !== 'quick'
   const total = getOrderTotal(order, products)
   const hasItems = Object.keys(order).length > 0
@@ -388,7 +389,7 @@ export default function Till({
 
       {/* Category toggles */}
       <div className={`${styles.catToggles} hide-scroll`}>
-        {CATEGORIES.map(cat => (
+        {categories.map(cat => (
           <button
             key={cat}
             className={`${styles.catToggle} ${hiddenCats.has(cat) ? styles.catOff : styles.catOn}`}
@@ -401,7 +402,7 @@ export default function Till({
 
       {/* Products */}
       <div className={`${styles.productsScroll} ${tabLimitReached ? styles.productsScrollBlocked : ''}`}>
-        {CATEGORIES.filter(c => !hiddenCats.has(c)).map(cat => (
+        {categories.filter(c => !hiddenCats.has(c)).map(cat => (
           <div key={cat} className={styles.catSection}>
             <div className={styles.catLabel}>{cat}</div>
             <div className={styles.grid}>

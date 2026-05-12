@@ -152,3 +152,5 @@ export const DEFAULT_TAB_LIMIT = 500
 export const TAB_PRESETS = ['Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5', 'Table 6']
 
 export const CATEGORIES = ['Wine', 'Beer', 'Cider', 'Spirits', 'Shots', 'Soft Drinks']
+
+export const STOCK_CATEGORIES = ['Lager', 'Ale', '0% Beer', 'Cider', 'House Spirits', 'Premium Spirits', 'Other Spirits', 'Wine', 'Soft Drinks', 'Mixers']
