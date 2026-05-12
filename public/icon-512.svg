@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Gingerbread Till icon">
+  <rect width="512" height="512" rx="112" fill="#1a1a2e"/>
+  <circle cx="256" cy="192" r="76" fill="#d99a5f"/>
+  <path d="M148 422c13-94 60-150 108-150s95 56 108 150H148z" fill="#d99a5f"/>
+  <circle cx="228" cy="182" r="11" fill="#1a1a2e"/>
+  <circle cx="284" cy="182" r="11" fill="#1a1a2e"/>
+  <path d="M224 220c21 18 43 18 64 0" fill="none" stroke="#1a1a2e" stroke-width="14" stroke-linecap="round"/>
+  <path d="M154 314h204" stroke="#ffffff" stroke-width="26" stroke-linecap="round"/>
+  <path d="M176 352h160" stroke="#88c4dd" stroke-width="26" stroke-linecap="round"/>
+</svg>

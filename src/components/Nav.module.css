@@ -17,3 +17,11 @@
 }
 .btn:hover { color: rgba(255,255,255,0.7); }
 .active { color: var(--accent) !important; border-bottom-color: var(--accent) !important; }
+
+@media (min-width: 600px) {
+  .btn {
+    min-height: 44px;
+    padding: 12px 4px;
+    font-size: 13px;
+  }
+}

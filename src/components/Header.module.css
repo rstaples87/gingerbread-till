@@ -20,3 +20,27 @@
 }
 .staffPill:hover { background: rgba(255,255,255,0.2); }
 .clock { font-size: 12px; opacity: 0.45; }
+
+@media (min-width: 600px) {
+  .header {
+    padding: 14px 18px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .sub {
+    font-size: 12px;
+  }
+
+  .staffPill {
+    min-height: 38px;
+    padding: 7px 14px;
+    font-size: 13px;
+  }
+
+  .clock {
+    font-size: 13px;
+  }
+}

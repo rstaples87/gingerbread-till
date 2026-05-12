@@ -373,3 +373,222 @@
   font-size: 13px; font-weight: 500; background: var(--white);
 }
 .presetBtn:active { background: var(--navy); color: #fff; }
+
+@media (min-width: 600px) {
+  .banner {
+    padding: 10px 18px;
+    font-size: 13px;
+  }
+
+  .tabsBar {
+    padding: 10px 14px;
+    gap: 9px;
+  }
+
+  .tabChip {
+    min-height: 40px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
+  .addTabBtn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .catToggles {
+    padding: 9px 14px;
+    gap: 8px;
+  }
+
+  .catToggle {
+    min-height: 36px;
+    padding: 7px 15px;
+    font-size: 12px;
+  }
+
+  .tabLimitBanner {
+    padding: 12px 18px;
+    font-size: 14px;
+  }
+
+  .productsScroll {
+    padding: 14px;
+  }
+
+  .catSection {
+    margin-bottom: 10px;
+  }
+
+  .catLabel {
+    font-size: 11px;
+    margin: 14px 0 8px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .prodBtn {
+    min-height: 112px;
+    padding: 14px 12px;
+  }
+
+  .prodName {
+    font-size: 14px;
+  }
+
+  .prodPrice {
+    font-size: 17px;
+  }
+
+  .prodStock {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .orderHead {
+    padding: 10px 18px;
+  }
+
+  .orderTitle,
+  .orderEmpty,
+  .payBtn {
+    font-size: 14px;
+  }
+
+  .clearBtn,
+  .oiSub {
+    font-size: 13px;
+  }
+
+  .orderItems {
+    padding: 6px 18px;
+  }
+
+  .orderItem {
+    padding: 8px 0;
+  }
+
+  .oiName {
+    font-size: 14px;
+  }
+
+  .oiUnit {
+    font-size: 11px;
+  }
+
+  .qtyBtn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .oiQty {
+    font-size: 16px;
+    min-width: 22px;
+  }
+
+  .orderFooter {
+    padding: 12px 18px 18px;
+  }
+
+  .totalLabel {
+    font-size: 14px;
+  }
+
+  .totalAmount {
+    font-size: 30px;
+  }
+
+  .payBtn,
+  .tabBtn,
+  .chargeBtn,
+  .cancelBtn,
+  .confirmBtn,
+  .sheetPayBtn,
+  .variantBtn,
+  .presetBtn {
+    min-height: 44px;
+  }
+
+  .tabBtn,
+  .chargeBtn {
+    font-size: 16px;
+  }
+
+  .sheet {
+    max-width: 768px;
+  }
+
+  .variantGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1025px) {
+  .wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "banner banner"
+      "tabs tabs"
+      "limit limit"
+      "cats order"
+      "products order";
+    min-height: 0;
+  }
+
+  .banner {
+    grid-area: banner;
+  }
+
+  .tabsBar {
+    grid-area: tabs;
+  }
+
+  .tabLimitBanner {
+    grid-area: limit;
+  }
+
+  .catToggles {
+    grid-area: cats;
+    border-right: 1px solid var(--border);
+  }
+
+  .productsScroll {
+    grid-area: products;
+    min-height: 0;
+    padding: 16px;
+    border-right: 1px solid var(--border);
+  }
+
+  .orderPanel {
+    grid-area: order;
+    max-height: none;
+    height: 100%;
+    min-height: 0;
+    border-top: none;
+    border-left: 1px solid var(--border);
+  }
+
+  .orderItems {
+    min-height: 0;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .prodBtn {
+    min-height: 122px;
+  }
+
+  .sheet {
+    border-radius: 18px;
+    max-width: 560px;
+    margin: auto;
+  }
+}
