@@ -336,14 +336,6 @@ export default function Till({
 
   return (
     <div className={styles.wrap}>
-      {/* Low stock banner */}
-      {(outItems.length > 0 || lowItems.length > 0) && (
-        <div className={styles.banner}>
-          {outItems.length > 0 && `⚠ Out of stock: ${outItems.join(', ')}. `}
-          {lowItems.length > 0 && `Low stock: ${lowItems.join(', ')}.`}
-        </div>
-      )}
-
       {/* Tabs bar */}
       <div className={`${styles.tabsBar} hide-scroll`}>
         <button
@@ -440,6 +432,14 @@ export default function Till({
           </div>
         ))}
       </div>
+
+      {/* Low stock banner */}
+      {(outItems.length > 0 || lowItems.length > 0) && (
+        <div className={styles.banner}>
+          {outItems.length > 0 && `⚠ Out of stock: ${outItems.join(', ')}. `}
+          {lowItems.length > 0 && `Low stock: ${lowItems.join(', ')}.`}
+        </div>
+      )}
 
       {/* Order panel */}
       <div className={styles.orderPanel}>

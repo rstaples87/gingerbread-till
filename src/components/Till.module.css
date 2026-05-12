@@ -1,11 +1,10 @@
 .wrap { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 .banner {
-  background: #fff3cd;
-  border-bottom: 1px solid #ffc107;
+  background: var(--accent);
   padding: 8px 14px;
   font-size: 12px;
-  color: #856404;
+  color: #fff;
   flex-shrink: 0;
 }
 
@@ -530,13 +529,13 @@
   .wrap {
     display: grid;
     grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
-    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "banner banner"
       "tabs tabs"
       "limit limit"
       "cats order"
-      "products order";
+      "products order"
+      "banner order";
     min-height: 0;
   }
 
