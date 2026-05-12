@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { STOCK_ITEMS } from '../data'
 import { fmt, formatStockItemQuantity } from '../utils'
 import styles from './Stock.module.css'
 
@@ -14,7 +13,7 @@ function getPortionLabel(product) {
   return product.portionSize >= 100 ? 'glasses' : 'measures'
 }
 
-export default function Stock({ products, stock, updateStock, stockItems, setStockItems }) {
+export default function Stock({ products, stock, updateStock, stockItems, setStockItems, stockDefinitions }) {
   const [tab, setTab] = useState('till')
 
   const changeStockItem = (id, delta) => {
@@ -65,7 +64,7 @@ export default function Stock({ products, stock, updateStock, stockItems, setSto
         })}
 
         {tab === 'take' && STOCK_CATS.map(cat => {
-          const items = STOCK_ITEMS.filter(i => i.category === cat)
+          const items = stockDefinitions.filter(i => i.category === cat)
           if (!items.length) return null
           return (
             <div key={cat}>

@@ -7,6 +7,7 @@ export default function Nav({ view, setView, openTabsCount }) {
     { key: 'stock', label: 'Stock' },
     { key: 'staff', label: 'Staff' },
     { key: 'sales', label: 'Sales' },
+    { key: 'settings', label: 'Settings' },
   ]
   return (
     <nav className={styles.nav}>

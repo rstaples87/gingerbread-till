@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocalStorage } from './useLocalStorage'
-import { INITIAL_PRODUCTS, INITIAL_STAFF, STOCK_ITEMS, PRODUCT_VARIANTS, DEFAULT_TAB_LIMIT } from './data'
+import { INITIAL_PRODUCTS, INITIAL_STAFF, STOCK_ITEMS as INITIAL_STOCK_ITEMS, PRODUCT_VARIANTS as INITIAL_PRODUCT_VARIANTS, DEFAULT_TAB_LIMIT } from './data'
 import { supabase } from './supabase'
 import { fmt, getOrderTotal, orderToItems, tabTotal, mixerBottleDeductionForLine } from './utils'
 import Header from './components/Header'
@@ -10,6 +10,7 @@ import TabsView from './components/TabsView'
 import Stock from './components/Stock'
 import StaffLog from './components/StaffLog'
 import Sales from './components/Sales'
+import Settings from './components/Settings'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
 
@@ -85,6 +86,56 @@ async function flushSyncQueue() {
   writeSyncQueue(remaining)
 }
 
+function normaliseProductRow(row) {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    price: Number(row.price),
+    category: row.category,
+    stock: 0,
+  }
+}
+
+function serialiseVariantStockIds(variant) {
+  if (variant?.needsMixer) {
+    return {
+      main: variant.stockIds || [],
+      mixers: variant.mixerStockIds || [],
+    }
+  }
+  return variant?.stockIds || []
+}
+
+function normaliseVariantRow(row) {
+  const rawStockIds = row.stock_ids
+  const stockIds = Array.isArray(rawStockIds)
+    ? rawStockIds
+    : Array.isArray(rawStockIds?.main)
+      ? rawStockIds.main
+      : []
+  const mixerStockIds = Array.isArray(rawStockIds?.mixers) ? rawStockIds.mixers : []
+  return {
+    label: row.label || '',
+    stockIds,
+    deduct: Number(row.deduct ?? 1),
+    needsMixer: Boolean(row.needs_mixer),
+    ...(mixerStockIds.length ? { mixerStockIds } : {}),
+  }
+}
+
+function normaliseStockDefinitionRow(row, fallback) {
+  return {
+    ...(fallback || {}),
+    id: row.stock_key,
+    name: row.name || fallback?.name || row.stock_key,
+    category: row.category || fallback?.category || 'Other Spirits',
+    unit: row.unit || fallback?.unit || 'bottle',
+    displayUnit: row.display_unit || fallback?.displayUnit,
+    bottleYield: row.bottle_yield != null ? Number(row.bottle_yield) : fallback?.bottleYield,
+    stock: Number(row.qty ?? fallback?.stock ?? 0),
+  }
+}
+
 async function seedSupabase() {
   if (!supabase) return
   try {
@@ -100,12 +151,46 @@ async function seedSupabase() {
     }
     const { data: stockSample } = await supabase.from('stock_items').select('stock_key').limit(1)
     if (!stockSample?.length) {
-      await supabase.from('stock_items').insert(
-        STOCK_ITEMS.map(s => ({ stock_key: s.id, qty: s.stock ?? 0 })),
-      )
+      const seedRows = INITIAL_STOCK_ITEMS.map(s => ({
+        stock_key: s.id,
+        qty: s.stock ?? 0,
+        name: s.name,
+        category: s.category,
+        unit: s.unit,
+        bottle_yield: s.bottleYield ?? null,
+        display_unit: s.displayUnit ?? null,
+      }))
+      const { error: stockSeedError } = await supabase.from('stock_items').insert(seedRows)
+      if (stockSeedError) {
+        await supabase.from('stock_items').insert(
+          INITIAL_STOCK_ITEMS.map(s => ({ stock_key: s.id, qty: s.stock ?? 0 })),
+        )
+      }
     }
   } catch (err) {
     console.warn('Supabase seed failed:', err?.message || err)
+  }
+}
+
+async function loadProductsFromSupabase(setProducts, setProductVariants) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase.from('products').select('id, name, price, category').order('id')
+    if (error) throw error
+    if (!data?.length) return
+    setProducts(data.map(normaliseProductRow))
+
+    const { data: variantRows, error: variantError } = await supabase
+      .from('product_variants')
+      .select('product_id, label, stock_ids, deduct, needs_mixer')
+    if (variantError) throw variantError
+    const variants = {}
+    for (const row of variantRows || []) {
+      variants[Number(row.product_id)] = normaliseVariantRow(row)
+    }
+    setProductVariants(variants)
+  } catch (err) {
+    console.warn('loadProductsFromSupabase failed:', err?.message || err)
   }
 }
 
@@ -125,10 +210,17 @@ function syncStockToSupabase(map) {
     .catch(err => maybeQueueSyncFailure('stock', rows, err))
 }
 
-async function loadStockFromSupabase(setStockItemsRaw) {
+async function loadStockFromSupabase(setStockItemsRaw, setStockDefinitions) {
   if (!supabase) return
   try {
-    const { data, error } = await supabase.from('stock_items').select('stock_key, qty')
+    let { data, error } = await supabase
+      .from('stock_items')
+      .select('stock_key, qty, name, category, unit, bottle_yield, display_unit')
+    if (error) {
+      const fallback = await supabase.from('stock_items').select('stock_key, qty')
+      data = fallback.data
+      error = fallback.error
+    }
     if (error) throw error
     if (!data?.length) return
     setStockItemsRaw(prev => {
@@ -138,6 +230,13 @@ async function loadStockFromSupabase(setStockItemsRaw) {
       }
       return next
     })
+    const hasDefinitions = data.some(row => row.name || row.category || row.unit || row.bottle_yield != null)
+    if (hasDefinitions) {
+      setStockDefinitions(prev => {
+        const fallbackById = Object.fromEntries(prev.map(item => [item.id, item]))
+        return data.map(row => normaliseStockDefinitionRow(row, fallbackById[row.stock_key]))
+      })
+    }
   } catch (err) {
     console.warn('loadStockFromSupabase failed:', err?.message || err)
   }
@@ -175,6 +274,62 @@ async function loadTillStockFromSupabase(setStockRaw) {
   } catch (err) {
     console.warn('loadTillStockFromSupabase failed:', err?.message || err)
   }
+}
+
+async function upsertProductToSupabase(product) {
+  if (!supabase) return
+  const { error } = await supabase.from('products').upsert({
+    id: Number(product.id),
+    name: product.name,
+    price: Number(product.price),
+    category: product.category,
+  }, { onConflict: 'id' })
+  if (error) throw error
+}
+
+async function upsertProductVariantToSupabase(productId, variant) {
+  if (!supabase) return
+  if (!variant) {
+    const { error } = await supabase.from('product_variants').delete().eq('product_id', Number(productId))
+    if (error) throw error
+    return
+  }
+  const { error } = await supabase.from('product_variants').upsert({
+    product_id: Number(productId),
+    label: variant.label || null,
+    stock_ids: serialiseVariantStockIds(variant),
+    deduct: Number(variant.deduct ?? 1),
+    needs_mixer: Boolean(variant.needsMixer),
+  }, { onConflict: 'product_id' })
+  if (error) throw error
+}
+
+async function deleteProductFromSupabase(productId) {
+  if (!supabase) return
+  const variantDelete = await supabase.from('product_variants').delete().eq('product_id', Number(productId))
+  if (variantDelete.error) throw variantDelete.error
+  const productDelete = await supabase.from('products').delete().eq('id', Number(productId))
+  if (productDelete.error) throw productDelete.error
+}
+
+async function upsertStockDefinitionToSupabase(item, qty) {
+  if (!supabase) return
+  const { error } = await supabase.from('stock_items').upsert({
+    stock_key: item.id,
+    qty: Number(qty ?? item.stock ?? 0),
+    name: item.name,
+    category: item.category,
+    unit: item.unit,
+    bottle_yield: item.bottleYield == null ? null : Number(item.bottleYield),
+    display_unit: item.displayUnit || null,
+  }, { onConflict: 'stock_key' })
+  if (error) throw error
+}
+
+async function deleteStockDefinitionFromSupabase(stockKey) {
+  if (!supabase) return
+  const { error } = await supabase.from('stock_items').delete().eq('stock_key', stockKey)
+  if (error) throw error
 }
 
 function syncTransactionToSupabase(tx) {
@@ -216,8 +371,10 @@ function syncTransactionToSupabase(tx) {
 export default function App() {
   const [view, setView] = useState('till')
   const [products, setProducts] = useLocalStorage('bt_products', INITIAL_PRODUCTS)
+  const [productVariants, setProductVariants] = useLocalStorage('bt_product_variants', INITIAL_PRODUCT_VARIANTS)
+  const [stockDefinitions, setStockDefinitions] = useLocalStorage('bt_stock_definitions', INITIAL_STOCK_ITEMS)
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
-  const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(STOCK_ITEMS.map(s => [s.id, s.stock])))
+  const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
   const stockSyncReadyRef = useRef(false)
 
   const setStock = useCallback((update) => {
@@ -246,6 +403,7 @@ export default function App() {
   const [staffOverlayOpen, setStaffOverlayOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', visible: false })
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
+  const mixerStockIds = stockDefinitions.filter(item => item.category === 'Mixers').map(item => item.id)
 
   // Restore Date objects from localStorage (they're serialised as strings)
   const hydratedTabs = openTabs.map(t => ({ ...t, openedAt: new Date(t.openedAt) }))
@@ -265,7 +423,9 @@ export default function App() {
     ;(async () => {
       await seedSupabase()
       if (cancelled) return
-      await loadStockFromSupabase(setStockItemsRaw)
+      await loadProductsFromSupabase(setProducts, setProductVariants)
+      if (cancelled) return
+      await loadStockFromSupabase(setStockItemsRaw, setStockDefinitions)
       if (cancelled) return
       await loadTillStockFromSupabase(setStockRaw)
       stockSyncReadyRef.current = true
@@ -292,8 +452,38 @@ export default function App() {
     } catch {}
     setProducts(INITIAL_PRODUCTS)
     setStock(Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
-    setStockItems(Object.fromEntries(STOCK_ITEMS.map(s => [s.id, s.stock])))
-  }, [products, setProducts, setStock, setStockItems])
+    setProductVariants(INITIAL_PRODUCT_VARIANTS)
+    setStockDefinitions(INITIAL_STOCK_ITEMS)
+    setStockItems(Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
+  }, [products, setProducts, setProductVariants, setStock, setStockDefinitions, setStockItems])
+
+  useEffect(() => {
+    setStockItems(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const item of stockDefinitions) {
+        if (next[item.id] == null) {
+          next[item.id] = item.stock ?? 0
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [stockDefinitions, setStockItems])
+
+  useEffect(() => {
+    setStock(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const product of products) {
+        if (next[product.id] == null) {
+          next[product.id] = product.stock ?? 0
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [products, setStock])
 
   useEffect(() => {
     if (currentStaff === 'Manager' || !currentStaff) return
@@ -383,8 +573,8 @@ export default function App() {
         const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
         const p = products.find(x => x.id === Number(id))
         if (!p) return
-        if (selectedStockId && PRODUCT_VARIANTS[p.id]) {
-          const deduct = PRODUCT_VARIANTS[p.id].deduct || 1
+        if (selectedStockId && productVariants[p.id]) {
+          const deduct = productVariants[p.id].deduct || 1
           const amount = deduct * qty
           setStockItems(prev => ({ ...prev, [selectedStockId]: Math.max(0, (prev[selectedStockId] ?? 0) - amount) }))
         } else {
@@ -392,7 +582,7 @@ export default function App() {
           setStock(s => ({ ...s, [p.id]: Math.max(0, (s[p.id] ?? 0) - unitsToDeduct) }))
         }
         if (selectedMixerId) {
-          const mixerDef = STOCK_ITEMS.find(s => s.id === selectedMixerId)
+          const mixerDef = stockDefinitions.find(s => s.id === selectedMixerId)
           const mixDed = mixerBottleDeductionForLine(p.id, qty, mixerDef?.bottleYield)
           setStockItems(prev => ({
             ...prev,
@@ -414,7 +604,7 @@ export default function App() {
     }))
     clearOrder(tabId)
     showToast('Items added to ' + (tabRow.name || 'tab'))
-  }, [orders, products, openTabs, setOpenTabs, setStock, setStockItems, clearOrder, showToast])
+  }, [orders, products, productVariants, stockDefinitions, openTabs, setOpenTabs, setStock, setStockItems, clearOrder, showToast])
 
   const settleTab = useCallback((tabId, payment, extras = {}) => {
     const tab = openTabs.find(t => t.id === tabId)
@@ -455,8 +645,8 @@ export default function App() {
     items.forEach(i => {
       const p = products.find(x => x.id === i.productId || x.name === i.name)
       if (p) {
-        if (i.selectedStockId && PRODUCT_VARIANTS[p.id]) {
-          const deduct = PRODUCT_VARIANTS[p.id].deduct || 1
+        if (i.selectedStockId && productVariants[p.id]) {
+          const deduct = productVariants[p.id].deduct || 1
           const amount = deduct * i.qty
           setStockItems(prev => ({ ...prev, [i.selectedStockId]: Math.max(0, (prev[i.selectedStockId] ?? 0) - amount) }))
         } else {
@@ -464,7 +654,7 @@ export default function App() {
           setStock(s => ({ ...s, [p.id]: Math.max(0, (s[p.id] ?? 0) - unitsToDeduct) }))
         }
         if (i.selectedMixerId) {
-          const mixerDef = STOCK_ITEMS.find(s => s.id === i.selectedMixerId)
+          const mixerDef = stockDefinitions.find(s => s.id === i.selectedMixerId)
           const mixDed = mixerBottleDeductionForLine(p.id, i.qty, mixerDef?.bottleYield)
           setStockItems(prev => ({
             ...prev,
@@ -491,7 +681,7 @@ export default function App() {
     syncTransactionToSupabase(tx)
     clearOrder('quick')
     showToast('Sale recorded — ' + fmt(total))
-  }, [orders, products, addTransaction, activeSaleStaff, setStock, setStockItems, clearOrder, showToast])
+  }, [orders, products, productVariants, stockDefinitions, addTransaction, activeSaleStaff, setStock, setStockItems, clearOrder, showToast])
 
   const voidTransaction = useCallback((txId) => {
     setTransactions(prev => prev.map(tx => {
@@ -499,8 +689,8 @@ export default function App() {
       tx.items.forEach(i => {
         const p = products.find(x => x.id === i.productId || x.name === i.name)
         if (p) {
-          if (i.selectedStockId && PRODUCT_VARIANTS[p.id]) {
-            const deduct = PRODUCT_VARIANTS[p.id].deduct || 1
+          if (i.selectedStockId && productVariants[p.id]) {
+            const deduct = productVariants[p.id].deduct || 1
             const amount = deduct * i.qty
             setStockItems(prev => ({ ...prev, [i.selectedStockId]: (prev[i.selectedStockId] ?? 0) + amount }))
           } else {
@@ -508,7 +698,7 @@ export default function App() {
             setStock(s => ({ ...s, [p.id]: (s[p.id] ?? 0) + unitsToRestore }))
           }
           if (i.selectedMixerId) {
-            const mixerDef = STOCK_ITEMS.find(s => s.id === i.selectedMixerId)
+            const mixerDef = stockDefinitions.find(s => s.id === i.selectedMixerId)
             const mixDed = mixerBottleDeductionForLine(p.id, i.qty, mixerDef?.bottleYield)
             setStockItems(prev => ({
               ...prev,
@@ -520,7 +710,7 @@ export default function App() {
       return { ...tx, voided: true, voidedAt: new Date() }
     }))
     showToast('Transaction voided — stock restored')
-  }, [products, setTransactions, setStock, setStockItems, showToast])
+  }, [products, productVariants, stockDefinitions, setTransactions, setStock, setStockItems, showToast])
 
   const mergePreviewIntoTabOrder = useCallback((tabOrder, quickOrder) => {
     return Object.entries(quickOrder).reduce((acc, [id, line]) => {
@@ -572,6 +762,109 @@ export default function App() {
     showToast(`Tab limit updated to ${fmt(n)}`)
   }, [setOpenTabs, showToast])
 
+  const saveProduct = useCallback((product, variant) => {
+    const cleanProduct = {
+      ...product,
+      id: Number(product.id),
+      name: String(product.name || '').trim(),
+      price: Number(product.price || 0),
+      category: product.category,
+      stock: product.stock ?? 0,
+    }
+    setProducts(prev => {
+      const exists = prev.some(p => p.id === cleanProduct.id)
+      return exists
+        ? prev.map(p => (p.id === cleanProduct.id ? { ...p, ...cleanProduct } : p))
+        : [...prev, cleanProduct]
+    })
+    setProductVariants(prev => {
+      const next = { ...prev }
+      if (variant) next[cleanProduct.id] = variant
+      else delete next[cleanProduct.id]
+      return next
+    })
+    setStock(prev => ({ ...prev, [cleanProduct.id]: prev[cleanProduct.id] ?? cleanProduct.stock ?? 0 }))
+    upsertProductToSupabase(cleanProduct)
+      .then(() => upsertProductVariantToSupabase(cleanProduct.id, variant))
+      .catch(err => console.warn('saveProduct failed:', err?.message || err))
+    showToast('Product saved')
+  }, [setProducts, setProductVariants, setStock, showToast])
+
+  const deleteProduct = useCallback((productId) => {
+    const id = Number(productId)
+    setProducts(prev => prev.filter(p => p.id !== id))
+    setProductVariants(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setStock(prev => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    deleteProductFromSupabase(id)
+      .catch(err => console.warn('deleteProduct failed:', err?.message || err))
+    showToast('Product deleted')
+  }, [setProducts, setProductVariants, setStock, showToast])
+
+  const saveStockDefinition = useCallback((item) => {
+    const cleanItem = {
+      ...item,
+      name: String(item.name || '').trim(),
+      category: item.category,
+      unit: item.unit,
+      ...(item.bottleYield === '' || item.bottleYield == null ? {} : { bottleYield: Number(item.bottleYield) }),
+      ...(item.displayUnit ? { displayUnit: item.displayUnit } : {}),
+    }
+    setStockDefinitions(prev => {
+      const exists = prev.some(row => row.id === cleanItem.id)
+      return exists
+        ? prev.map(row => (row.id === cleanItem.id ? { ...row, ...cleanItem } : row))
+        : [...prev, cleanItem]
+    })
+    const qty = stockItems?.[cleanItem.id] ?? cleanItem.stock ?? 0
+    setStockItems(prev => ({ ...prev, [cleanItem.id]: prev[cleanItem.id] ?? qty }))
+    upsertStockDefinitionToSupabase(cleanItem, qty)
+      .catch(err => console.warn('saveStockDefinition failed:', err?.message || err))
+    showToast('Stock item saved')
+  }, [setStockDefinitions, setStockItems, stockItems, showToast])
+
+  const deleteStockDefinition = useCallback((stockKey) => {
+    setStockDefinitions(prev => prev.filter(item => item.id !== stockKey))
+    setStockItems(prev => {
+      const next = { ...prev }
+      delete next[stockKey]
+      return next
+    })
+    const nextVariants = {}
+    const changedVariants = []
+    for (const [productId, variant] of Object.entries(productVariants)) {
+      const nextVariant = {
+        ...variant,
+        stockIds: (variant.stockIds || []).filter(id => id !== stockKey),
+        mixerStockIds: (variant.mixerStockIds || []).filter(id => id !== stockKey),
+        ...(variant.fixedSpiritStockId === stockKey ? { fixedSpiritStockId: null } : {}),
+      }
+      nextVariants[productId] = nextVariant
+      if (
+        (variant.stockIds || []).length !== nextVariant.stockIds.length ||
+        (variant.mixerStockIds || []).length !== nextVariant.mixerStockIds.length ||
+        variant.fixedSpiritStockId === stockKey
+      ) {
+        changedVariants.push([productId, nextVariant])
+      }
+    }
+    setProductVariants(nextVariants)
+    deleteStockDefinitionFromSupabase(stockKey)
+      .catch(err => console.warn('deleteStockDefinition failed:', err?.message || err))
+    changedVariants.forEach(([productId, variant]) => {
+      upsertProductVariantToSupabase(productId, variant)
+        .catch(err => console.warn('update variant after stock delete failed:', err?.message || err))
+    })
+    showToast('Stock item deleted')
+  }, [productVariants, setStockDefinitions, setStockItems, setProductVariants, showToast])
+
   const clockInStaff = useCallback((staffName) => {
     if (!staffName) return
     setCurrentlyIn(prev => {
@@ -591,8 +884,11 @@ export default function App() {
 
   const sharedProps = {
     products, setProducts,
+    productVariants, setProductVariants,
     stock, updateStock, setStockValue,
     stockItems, setStockItems,
+    stockDefinitions, setStockDefinitions,
+    mixerStockIds,
     staff, setStaff,
     currentStaff, setCurrentStaff,
     attendanceLog: hydratedAttendanceLog, setAttendanceLog,
@@ -605,6 +901,8 @@ export default function App() {
     openNewTabEntry, commitItemsToTab,
     settleTab, cancelTab, updateTabLimit,
     processCharge, voidTransaction, mergeOrderToTab,
+    saveProduct, deleteProduct,
+    saveStockDefinition, deleteStockDefinition,
     showToast,
   }
 
@@ -624,6 +922,7 @@ export default function App() {
       {view === 'stock' && <Stock  {...sharedProps} />}
       {view === 'staff' && <StaffLog {...sharedProps} />}
       {view === 'sales' && <Sales  {...sharedProps} />}
+      {view === 'settings' && <Settings {...sharedProps} />}
 
       {staffOverlayOpen && (
         <StaffOverlay

@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { fmt, mixerBottleDeductionForLine, formatStockItemQuantity } from '../utils'
-import { PRODUCT_VARIANTS, STOCK_ITEMS } from '../data'
 import styles from './Sales.module.css'
 
 const DRINK_CATEGORIES = ['Wine', 'Beer', 'Cider', 'Spirits', 'Shots', 'Soft Drinks']
@@ -35,13 +34,13 @@ function buildDrinksSoldByCategory(products, live) {
   return out
 }
 
-function accumulateVariantBottleDeductions(products, live, stockItemById) {
+function accumulateVariantBottleDeductions(products, live, productVariants, stockItemById) {
   const bottleById = {}
   for (const tx of live) {
     for (const i of tx.items) {
       const p = products.find(x => x.id === i.productId || x.name === i.name)
       if (!p) continue
-      const pv = PRODUCT_VARIANTS[p.id]
+      const pv = productVariants[p.id]
 
       if (i.selectedStockId && pv) {
         const def = stockItemById[i.selectedStockId]
@@ -63,11 +62,11 @@ function accumulateVariantBottleDeductions(products, live, stockItemById) {
   return bottleById
 }
 
-function groupRemainingStockByCategory(stockItems) {
+function groupRemainingStockByCategory(stockDefinitions) {
   const seen = new Set()
   const order = []
   const groups = {}
-  for (const item of STOCK_ITEMS) {
+  for (const item of stockDefinitions) {
     const cat = item.category
     if (!groups[cat]) {
       groups[cat] = []
@@ -88,7 +87,7 @@ function stockRowHighlight(stockVal, bottleYield) {
   return ''
 }
 
-export default function Sales({ transactions, currentlyIn, setTransactions, voidTransaction, products, stockItems }) {
+export default function Sales({ transactions, currentlyIn, setTransactions, voidTransaction, products, stockItems, stockDefinitions, productVariants }) {
   const [reportOpen, setReportOpen] = useState(false)
   const [stockReportOpen, setStockReportOpen] = useState(false)
   const [float, setFloat] = useState(50)
@@ -118,14 +117,14 @@ export default function Sales({ transactions, currentlyIn, setTransactions, void
   const tabTx = live.filter(t => t.type === 'tab')
   const voidedTx = transactions.filter(t => t.voided)
 
-  const stockItemById = useMemo(() => Object.fromEntries(STOCK_ITEMS.map(s => [s.id, s])), [])
+  const stockItemById = useMemo(() => Object.fromEntries(stockDefinitions.map(s => [s.id, s])), [stockDefinitions])
 
   const stockReportData = useMemo(() => {
     const drinksByCat = buildDrinksSoldByCategory(products, live)
-    const bottleDeductions = accumulateVariantBottleDeductions(products, live, stockItemById)
-    const remainingGroups = groupRemainingStockByCategory(stockItems)
+    const bottleDeductions = accumulateVariantBottleDeductions(products, live, productVariants, stockItemById)
+    const remainingGroups = groupRemainingStockByCategory(stockDefinitions)
     return { drinksByCat, bottleDeductions, remainingGroups }
-  }, [products, live, stockItems, stockItemById])
+  }, [products, live, productVariants, stockDefinitions, stockItemById])
 
   const reportHeaderSubtitle = `${new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · Generated ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
 
@@ -328,13 +327,13 @@ export default function Sales({ transactions, currentlyIn, setTransactions, void
               <h3>Spirit breakdown</h3>
               {(() => {
                 const hasAny = SPIRIT_BREAKDOWN_CATS.some(cat =>
-                  STOCK_ITEMS.some(def => def.category === cat && (stockReportData.bottleDeductions[def.id] || 0) > 0),
+                  stockDefinitions.some(def => def.category === cat && (stockReportData.bottleDeductions[def.id] || 0) > 0),
                 )
                 if (!hasAny) {
                   return <div className={styles.reportRow}><span>No variant-tracked spirit or mixer sales this session</span></div>
                 }
                 return SPIRIT_BREAKDOWN_CATS.map(cat => {
-                  const items = STOCK_ITEMS.filter(s => s.category === cat)
+                  const items = stockDefinitions.filter(s => s.category === cat)
                   const rows = items
                     .map(def => {
                       const bottles = stockReportData.bottleDeductions[def.id] || 0

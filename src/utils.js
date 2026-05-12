@@ -42,6 +42,7 @@ export const getOrderTotal = (order, products) =>
 export const orderToItems = (order, products) =>
   Object.entries(order).map(([id, line]) => {
     const p = products.find(x => x.id === Number(id))
+    if (!p) return null
     return {
       productId: p.id,
       name: p.name,
@@ -50,7 +51,7 @@ export const orderToItems = (order, products) =>
       selectedStockId: getLineStockId(line),
       selectedMixerId: getLineMixerId(line),
     }
-  })
+  }).filter(Boolean)
 
 export const tabTotal = tab =>
   tab.items.reduce((s, i) => s + i.price * i.qty, 0)

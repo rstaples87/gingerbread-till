@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CATEGORIES, TAB_PRESETS, PRODUCT_VARIANTS, STOCK_ITEMS, MIXER_STOCK_IDS, DEFAULT_TAB_LIMIT } from '../data'
+import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
 import { fmt, getOrderTotal, orderToItems, mixerServesPerDrink, tabTotal } from '../utils'
 import styles from './Till.module.css'
 
@@ -13,7 +13,7 @@ function mixerChoiceLabel(stockItemName) {
 }
 
 export default function Till({
-  products, stock, stockItems,
+  products, productVariants, stock, stockItems, stockDefinitions, mixerStockIds,
   orders, updateOrder, clearOrder, activeOrderKey, switchOrder,
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
   processCharge, showToast,
@@ -28,7 +28,7 @@ export default function Till({
   const [cashTendered, setCashTendered] = useState('')
   const [variantSheet, setVariantSheet] = useState(null) // { productId, label, options, deduct, needsMixer }
   const [mixerSheet, setMixerSheet] = useState(null) // { productId, spiritStockId, options }
-  const stockItemById = Object.fromEntries(STOCK_ITEMS.map(i => [i.id, i]))
+  const stockItemById = Object.fromEntries(stockDefinitions.map(i => [i.id, i]))
 
   const order = orders[activeOrderKey] || {}
   const isTab = activeOrderKey !== 'quick'
@@ -37,7 +37,7 @@ export default function Till({
 
   // Low stock banner
   const getCombinedVariantStock = (productId) => {
-    const variant = PRODUCT_VARIANTS[productId]
+    const variant = productVariants[productId]
     if (!variant) return null
     if (variant.mixerOnly && variant.fixedSpiritStockId) {
       return stockItems?.[variant.fixedSpiritStockId] ?? 0
@@ -46,17 +46,18 @@ export default function Till({
   }
 
   const getVariantStatus = (product) => {
-    const variant = PRODUCT_VARIANTS[product.id]
+    const variant = productVariants[product.id]
     const mixedDrink = variant?.needsMixer || variant?.mixerOnly
     const mixerCombined = mixedDrink
-      ? MIXER_STOCK_IDS.reduce((sum, mid) => sum + (stockItems?.[mid] ?? 0), 0)
+      ? (variant.mixerStockIds?.length ? variant.mixerStockIds : mixerStockIds).reduce((sum, mid) => sum + (stockItems?.[mid] ?? 0), 0)
       : null
 
     const combined = getCombinedVariantStock(product.id)
     if (combined == null) return null
 
     if (mixedDrink) {
-      const mixerHasServe = MIXER_STOCK_IDS.some(mid => {
+      const mixerChoices = variant.mixerStockIds?.length ? variant.mixerStockIds : mixerStockIds
+      const mixerHasServe = mixerChoices.some(mid => {
         const def = stockItemById[mid]
         const y = def?.bottleYield ?? 0
         const st = stockItems?.[mid] ?? 0
@@ -117,7 +118,9 @@ export default function Till({
   }
 
   const openMixerChooser = (productId, spiritStockId) => {
-    const options = MIXER_STOCK_IDS.map(id => {
+    const variant = productVariants[productId]
+    const mixerChoices = variant?.mixerStockIds?.length ? variant.mixerStockIds : mixerStockIds
+    const options = mixerChoices.map(id => {
       const def = stockItemById[id]
       const y = def?.bottleYield ?? 0
       const st = stockItems?.[id] ?? 0
@@ -132,7 +135,7 @@ export default function Till({
   }
 
   const openNumpad = (productId) => {
-    const variant = PRODUCT_VARIANTS[productId]
+    const variant = productVariants[productId]
     if (variant?.mixerOnly && variant.fixedSpiritStockId) {
       openMixerChooser(productId, variant.fixedSpiritStockId)
       return
@@ -200,9 +203,9 @@ export default function Till({
     if (!product) return
     const currentStock = stock[id] ?? 0
     const portionsAvailable = product.bottleYield ? Math.floor(currentStock * product.bottleYield) : currentStock
-    if (numpad.selectedStockId && PRODUCT_VARIANTS[id]) {
+    if (numpad.selectedStockId && productVariants[id]) {
       const available = stockItems?.[numpad.selectedStockId] ?? 0
-      const required = (PRODUCT_VARIANTS[id].deduct || 1) * qty
+      const required = (productVariants[id].deduct || 1) * qty
       if (available < required) {
         showToast('Not enough stock for selection')
         return
@@ -247,9 +250,9 @@ export default function Till({
     if (delta > 0) {
       const selectedStockId = typeof line === 'object' ? line?.selectedStockId : null
       const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
-      if (selectedStockId && PRODUCT_VARIANTS[id]) {
+      if (selectedStockId && productVariants[id]) {
         const available = stockItems?.[selectedStockId] ?? 0
-        const required = (PRODUCT_VARIANTS[id].deduct || 1) * qty
+        const required = (productVariants[id].deduct || 1) * qty
         if (available < required) {
           showToast('Not enough stock for selection')
           return
