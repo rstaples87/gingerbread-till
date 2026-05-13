@@ -1,5 +1,5 @@
 .header {
-  background: var(--navy);
+  background: #1a1a2e;
   color: #fff;
   padding: 10px 14px;
   display: flex;
@@ -10,24 +10,38 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  min-width: 0;
 }
 .logo {
-  height: 32px;
-  width: 32px;
+  height: 36px;
+  width: 36px;
   flex-shrink: 0;
   display: block;
   border-radius: 50%;
 }
-.title {
+.brandStack {
   font-family: 'Inter', system-ui, sans-serif;
+  min-width: 0;
+  line-height: 1.15;
+}
+.brandGinger {
   font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  font-weight: 700;
   color: #fff;
 }
-.sub { font-size: 11px; opacity: 0.45; margin-top: 1px; }
+.brandTill {
+  font-size: 16px;
+  font-weight: 300;
+  color: #88c4dd;
+}
+.brandEvent {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.55);
+}
 .right { display: flex; align-items: center; gap: 8px; }
 .staffPill {
   background: var(--accent);
@@ -45,12 +59,14 @@
     padding: 14px 18px;
   }
 
-  .title {
-    font-size: 18px;
+  .brandGinger,
+  .brandTill {
+    font-size: 17px;
   }
 
-  .sub {
-    font-size: 12px;
+  .brandEvent {
+    font-size: 10px;
+    letter-spacing: 2.5px;
   }
 
   .staffPill {
