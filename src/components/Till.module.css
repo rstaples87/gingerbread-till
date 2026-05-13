@@ -99,6 +99,7 @@
   padding: 7px 10px;
   display: flex;
   gap: 6px;
+  align-items: center;
   overflow-x: auto;
   flex-shrink: 0;
 }
@@ -114,6 +115,22 @@
 }
 .catOn { background: var(--accent); color: #fff; border-color: var(--accent); }
 .catOff { background: #f8f8f8; color: #888; opacity: 0.45; text-decoration: line-through; }
+
+.openAllBtn {
+  margin-left: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.openAllBtn:active {
+  background: #f0f5f8;
+}
 
 /* Products */
 .tabLimitBanner {
@@ -131,12 +148,39 @@
   user-select: none;
 }
 .catSection { margin-bottom: 6px; }
-.catLabel {
-  font-size: 10px; font-weight: 700; color: #aaa;
-  text-transform: uppercase; letter-spacing: 1.2px;
-  margin: 12px 0 6px;
+.catHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 4px 8px;
+  margin: 4px 0 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
-.catLabel:first-child { margin-top: 0; }
+.catHeader:first-of-type { margin-top: 0; }
+.catHeader:active {
+  opacity: 0.75;
+}
+.catChevron {
+  font-size: 9px;
+  color: #aaa;
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.catHeaderTitle {
+  font-size: 10px;
+  font-weight: 700;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
 .grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; }
 .prodBtn {
   background: var(--white);
