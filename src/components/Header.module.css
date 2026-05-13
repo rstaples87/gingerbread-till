@@ -7,6 +7,17 @@
   align-items: center;
   flex-shrink: 0;
 }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo {
+  height: 36px;
+  width: 36px;
+  flex-shrink: 0;
+  display: block;
+}
 .title { font-size: 17px; font-weight: 700; }
 .sub { font-size: 11px; opacity: 0.45; margin-top: 1px; }
 .right { display: flex; align-items: center; gap: 8px; }

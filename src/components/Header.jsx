@@ -13,9 +13,18 @@ export default function Header({ currentStaff, onStaffClick }) {
 
   return (
     <header className={styles.header}>
-      <div>
-        <div className={styles.title}>Gingerbread Till</div>
-        <div className={styles.sub}>v3.3</div>
+      <div className={styles.brand}>
+        <img
+          className={styles.logo}
+          src="/logo.svg"
+          alt=""
+          width={36}
+          height={36}
+        />
+        <div>
+          <div className={styles.title}>Gingerbread Till</div>
+          <div className={styles.sub}>v3.3</div>
+        </div>
       </div>
       <div className={styles.right}>
         <button className={styles.staffPill} onClick={onStaffClick}>
