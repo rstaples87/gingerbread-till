@@ -440,10 +440,10 @@ export default function Till({
                 onClick={() => toggleSectionExpanded(cat)}
                 aria-expanded={isExpanded}
               >
+                <span className={styles.catHeaderTitle}>{cat}</span>
                 <span className={styles.catChevron} aria-hidden>
                   {isExpanded ? '▼' : '▶'}
                 </span>
-                <span className={styles.catHeaderTitle}>{cat}</span>
               </button>
               {isExpanded && (
                 <div className={styles.grid}>
