@@ -148,43 +148,6 @@
   user-select: none;
 }
 .catSection { margin-bottom: 6px; }
-.catHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 4px 8px;
-  margin: 4px 0 0;
-  border: none;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  -webkit-tap-highlight-color: transparent;
-}
-.catHeader:first-of-type { margin-top: 0; }
-.catHeader:active {
-  opacity: 0.75;
-}
-.catChevron {
-  font-size: 10px;
-  color: #aaa;
-  width: 18px;
-  flex-shrink: 0;
-  text-align: right;
-  line-height: 1;
-}
-.catHeaderTitle {
-  font-size: 10px;
-  font-weight: 700;
-  color: #aaa;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  flex: 1;
-  min-width: 0;
-}
 .grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; }
 .prodBtn {
   background: var(--white);

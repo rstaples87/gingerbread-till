@@ -18,9 +18,10 @@ export default function Till({
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
   processCharge, showToast,
 }) {
-  const [hiddenCats, setHiddenCats] = useState(new Set())
-  /** Categories with product grid expanded; omitted = collapsed header only */
-  const [expandedCats, setExpandedCats] = useState(() => new Set())
+  const [hiddenCats, setHiddenCats] = useState(() => {
+    const list = tillCategories?.length ? [...tillCategories] : [...CATEGORIES]
+    return new Set(list)
+  })
   const [numpad, setNumpad] = useState(null) // { productId, value }
   const [chargeModal, setChargeModal] = useState(false)
   const [confPayment, setConfPayment] = useState('cash')
@@ -113,20 +114,7 @@ export default function Till({
   }).map(p => p.name)
 
   const toggleCat = (cat) => {
-    const wasHidden = hiddenCats.has(cat)
     setHiddenCats(prev => {
-      const n = new Set(prev)
-      if (n.has(cat)) n.delete(cat)
-      else n.add(cat)
-      return n
-    })
-    if (wasHidden) {
-      setExpandedCats(prev => new Set(prev).add(cat))
-    }
-  }
-
-  const toggleSectionExpanded = (cat) => {
-    setExpandedCats(prev => {
       const n = new Set(prev)
       if (n.has(cat)) n.delete(cat)
       else n.add(cat)
@@ -135,14 +123,13 @@ export default function Till({
   }
 
   const visibleCats = categories.filter(c => !hiddenCats.has(c))
-  const allSectionsExpanded =
-    visibleCats.length > 0 && visibleCats.every(c => expandedCats.has(c))
+  const allChipsOpen = categories.length > 0 && hiddenCats.size === 0
 
-  const openOrCloseAllSections = () => {
-    if (allSectionsExpanded) {
-      setExpandedCats(new Set())
+  const openOrCloseAllChips = () => {
+    if (allChipsOpen) {
+      setHiddenCats(new Set(categories))
     } else {
-      setExpandedCats(new Set(visibleCats))
+      setHiddenCats(new Set())
     }
   }
 
@@ -422,67 +409,51 @@ export default function Till({
         <button
           type="button"
           className={styles.openAllBtn}
-          onClick={openOrCloseAllSections}
+          onClick={openOrCloseAllChips}
         >
-          {allSectionsExpanded ? 'Close all' : 'Open all'}
+          {allChipsOpen ? 'Close all' : 'Open all'}
         </button>
       </div>
 
       {/* Products */}
       <div className={`${styles.productsScroll} ${tabLimitReached ? styles.productsScrollBlocked : ''}`}>
-        {visibleCats.map(cat => {
-          const isExpanded = expandedCats.has(cat)
-          return (
-            <div key={cat} className={styles.catSection}>
-              <button
-                type="button"
-                className={styles.catHeader}
-                onClick={() => toggleSectionExpanded(cat)}
-                aria-expanded={isExpanded}
-              >
-                <span className={styles.catHeaderTitle}>{cat}</span>
-                <span className={styles.catChevron} aria-hidden>
-                  {isExpanded ? '▼' : '▶'}
-                </span>
-              </button>
-              {isExpanded && (
-                <div className={styles.grid}>
-                  {products.filter(p => p.category === cat).map(p => {
-                    const variantStatus = getVariantStatus(p)
-                    const s = stock[p.id] ?? 0
-                    const portionsAvailable = p.bottleYield ? Math.floor(s * p.bottleYield) : s
-                    const isOut = variantStatus ? variantStatus.isOut : (p.bottleYield ? portionsAvailable < 1 : s === 0)
-                    const isLow = variantStatus ? variantStatus.isLow : (p.bottleYield ? portionsAvailable > 0 && portionsAvailable <= 5 : s > 0 && s <= 5)
-                    const portionLabel = p.bottleYield ? getPortionLabel(p) : null
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className={`${styles.prodBtn} ${isOut ? styles.prodOut : ''}`}
-                        onClick={() => openNumpad(p.id)}
-                        disabled={isOut || tabLimitReached}
-                      >
-                        <div className={styles.prodName}>{p.name}</div>
-                        <div className={styles.prodPrice}>{fmt(p.price)}</div>
-                        <div className={`${styles.prodStock} ${isLow ? styles.stockLow : ''}`}>
-                          {isOut
-                            ? 'Out of stock'
-                            : variantStatus
-                              ? variantStatus.display
-                              : p.bottleYield
-                                ? `${portionsAvailable} ${portionLabel} available`
-                                : isLow
-                                  ? `Low — ${s} left`
-                                  : `${s} in stock`}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+        {visibleCats.map(cat => (
+          <div key={cat} className={styles.catSection}>
+            <div className={styles.grid}>
+              {products.filter(p => p.category === cat).map(p => {
+                const variantStatus = getVariantStatus(p)
+                const s = stock[p.id] ?? 0
+                const portionsAvailable = p.bottleYield ? Math.floor(s * p.bottleYield) : s
+                const isOut = variantStatus ? variantStatus.isOut : (p.bottleYield ? portionsAvailable < 1 : s === 0)
+                const isLow = variantStatus ? variantStatus.isLow : (p.bottleYield ? portionsAvailable > 0 && portionsAvailable <= 5 : s > 0 && s <= 5)
+                const portionLabel = p.bottleYield ? getPortionLabel(p) : null
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`${styles.prodBtn} ${isOut ? styles.prodOut : ''}`}
+                    onClick={() => openNumpad(p.id)}
+                    disabled={isOut || tabLimitReached}
+                  >
+                    <div className={styles.prodName}>{p.name}</div>
+                    <div className={styles.prodPrice}>{fmt(p.price)}</div>
+                    <div className={`${styles.prodStock} ${isLow ? styles.stockLow : ''}`}>
+                      {isOut
+                        ? 'Out of stock'
+                        : variantStatus
+                          ? variantStatus.display
+                          : p.bottleYield
+                            ? `${portionsAvailable} ${portionLabel} available`
+                            : isLow
+                              ? `Low — ${s} left`
+                              : `${s} in stock`}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
-          )
-        })}
+          </div>
+        ))}
       </div>
 
       {/* Low stock banner */}
