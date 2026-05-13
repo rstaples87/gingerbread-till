@@ -95,28 +95,24 @@ export default function StaffOverlay({ onSelect, onClose }) {
   }
 
   return (
-    <div className={styles.screen}>
+    <div className={`${styles.screen} ${step === 'pick' ? styles.screenPick : ''}`}>
       {step === 'pick' ? (
         <div className={styles.pickColumn}>
-          <div className={styles.heroWrap}>
-            <div className={styles.heroMark}>
-              <img
-                className={styles.heroIcon}
-                src="/logo.svg"
-                alt=""
-                width={88}
-                height={88}
-              />
-              <div className={styles.heroText}>
-                <div className={styles.heroTitle}>
-                  <span className={styles.heroGinger}>Gingerbread</span>
-                  <span className={styles.heroTill}> Till</span>
-                </div>
-                <div className={styles.heroEvent}>EVENT MANAGEMENT</div>
-              </div>
+          <div className={styles.heroMark}>
+            <img
+              className={styles.heroIcon}
+              src="/logo.svg"
+              alt=""
+              width={80}
+              height={80}
+            />
+            <div className={styles.heroText}>
+              <div className={styles.heroGinger}>Gingerbread</div>
+              <div className={styles.heroTill}>Till</div>
+              <div className={styles.heroEvent}>EVENT MANAGEMENT</div>
             </div>
           </div>
-          <div className={styles.card} role="dialog" aria-modal="true">
+          <div className={`${styles.card} ${styles.signInCard}`} role="dialog" aria-modal="true">
             <p className={styles.pickHint}>Manager sign in required</p>
             <button className={styles.adminBtn} type="button" onClick={startPinForAdmin}>
               Manager sign in

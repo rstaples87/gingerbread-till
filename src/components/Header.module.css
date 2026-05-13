@@ -17,20 +17,15 @@
   width: 32px;
   flex-shrink: 0;
   display: block;
+  border-radius: 50%;
 }
 .title {
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 16px;
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.02em;
-}
-.titleGinger {
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
-}
-.titleTill {
-  font-weight: 300;
-  color: #88c4dd;
+  color: #fff;
 }
 .sub { font-size: 11px; opacity: 0.45; margin-top: 1px; }
 .right { display: flex; align-items: center; gap: 8px; }
