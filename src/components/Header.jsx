@@ -18,11 +18,14 @@ export default function Header({ currentStaff, onStaffClick }) {
           className={styles.logo}
           src="/logo.svg"
           alt=""
-          width={36}
-          height={36}
+          width={32}
+          height={32}
         />
         <div>
-          <div className={styles.title}>Gingerbread Till</div>
+          <div className={styles.title}>
+            <span className={styles.titleGinger}>Gingerbread</span>
+            <span className={styles.titleTill}> Till</span>
+          </div>
           <div className={styles.sub}>v3.3</div>
         </div>
       </div>

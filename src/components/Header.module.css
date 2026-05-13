@@ -10,15 +10,28 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 .logo {
-  height: 36px;
-  width: 36px;
+  height: 32px;
+  width: 32px;
   flex-shrink: 0;
   display: block;
 }
-.title { font-size: 17px; font-weight: 700; }
+.title {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.titleGinger {
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+.titleTill {
+  font-weight: 300;
+  color: #88c4dd;
+}
 .sub { font-size: 11px; opacity: 0.45; margin-top: 1px; }
 .right { display: flex; align-items: center; gap: 8px; }
 .staffPill {
@@ -38,7 +51,7 @@
   }
 
   .title {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .sub {

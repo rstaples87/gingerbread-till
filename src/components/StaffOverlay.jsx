@@ -96,46 +96,58 @@ export default function StaffOverlay({ onSelect, onClose }) {
 
   return (
     <div className={styles.screen}>
-      <div className={styles.card} role="dialog" aria-modal="true">
-        {step === 'pick' && (
-          <>
-            <div className={styles.brand}>
-              <div className={styles.appName}>Gingerbread Till</div>
-              <div className={styles.tagline}>Manager sign in required</div>
+      {step === 'pick' ? (
+        <div className={styles.pickColumn}>
+          <div className={styles.heroWrap}>
+            <div className={styles.heroMark}>
+              <img
+                className={styles.heroIcon}
+                src="/logo.svg"
+                alt=""
+                width={88}
+                height={88}
+              />
+              <div className={styles.heroText}>
+                <div className={styles.heroTitle}>
+                  <span className={styles.heroGinger}>Gingerbread</span>
+                  <span className={styles.heroTill}> Till</span>
+                </div>
+                <div className={styles.heroEvent}>EVENT MANAGEMENT</div>
+              </div>
             </div>
-
+          </div>
+          <div className={styles.card} role="dialog" aria-modal="true">
+            <p className={styles.pickHint}>Manager sign in required</p>
             <button className={styles.adminBtn} type="button" onClick={startPinForAdmin}>
               Manager sign in
             </button>
-          </>
-        )}
+          </div>
+        </div>
+      ) : (
+        <div className={styles.card} role="dialog" aria-modal="true">
+          <div className={styles.pinHeader}>
+            <button
+              className={styles.backBtn}
+              type="button"
+              onClick={() => {
+                setStep('pick')
+                setPin('')
+                setError('')
+              }}
+            >
+              Back
+            </button>
+            <div className={styles.pinTitle}>Manager PIN</div>
+            <div className={styles.pinSpacer} />
+          </div>
 
-        {step === 'pin' && (
-          <>
-            <div className={styles.pinHeader}>
-              <button
-                className={styles.backBtn}
-                type="button"
-                onClick={() => {
-                  setStep('pick')
-                  setPin('')
-                  setError('')
-                }}
-              >
-                Back
-              </button>
-              <div className={styles.pinTitle}>Manager PIN</div>
-              <div className={styles.pinSpacer} />
-            </div>
+          <PinDots pinLength={pin.length} />
+          {error && <div className={styles.error}>{error}</div>}
+          {!error && <div className={styles.hint}>Enter 4-digit PIN</div>}
 
-            <PinDots pinLength={pin.length} />
-            {error && <div className={styles.error}>{error}</div>}
-            {!error && <div className={styles.hint}>Enter 4-digit PIN</div>}
-
-            <Numpad onDigit={onDigit} onClear={onClear} onDelete={onDelete} disabled={pin.length >= 4} />
-          </>
-        )}
-      </div>
+          <Numpad onDigit={onDigit} onClear={onClear} onDelete={onDelete} disabled={pin.length >= 4} />
+        </div>
+      )}
     </div>
   )
 }
