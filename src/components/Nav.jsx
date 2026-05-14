@@ -3,6 +3,7 @@ import styles from './Nav.module.css'
 export default function Nav({ view, setView, openTabsCount }) {
   const tabs = [
     { key: 'till', label: 'Till' },
+    { key: 'bar', label: 'Bar' },
     { key: 'tabs', label: openTabsCount > 0 ? `Tabs (${openTabsCount})` : 'Tabs' },
     { key: 'stock', label: 'Stock' },
     { key: 'staff', label: 'Staff' },

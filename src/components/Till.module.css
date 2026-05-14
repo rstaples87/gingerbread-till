@@ -223,6 +223,7 @@
 .payBtnActive { border-color: var(--accent); background: var(--accent); color: #fff; }
 .actionBtnsWrap { width: 100%; }
 .actionBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.actionBtnsThree { grid-template-columns: 1fr 1fr 1fr; }
 .chargeLimitHint {
   font-size: 11px;
   color: var(--red);
@@ -244,6 +245,23 @@
 }
 .chargeBtn:disabled { opacity: 0.28; cursor: default; }
 .chargeBtn:active:not(:disabled) { opacity: 0.8; }
+.sendToBarBtn {
+  padding: 13px;
+  background: var(--white);
+  color: var(--accent-dark);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 700;
+  transition: opacity 0.15s;
+}
+.sendToBarBtn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+.sendToBarBtn:active:not(:disabled) {
+  background: #f0f9fc;
+}
 
 /* Overlays */
 .overlay {
@@ -514,6 +532,7 @@
   .payBtn,
   .tabBtn,
   .chargeBtn,
+  .sendToBarBtn,
   .cancelBtn,
   .confirmBtn,
   .sheetPayBtn,
@@ -523,8 +542,9 @@
   }
 
   .tabBtn,
-  .chargeBtn {
-    font-size: 16px;
+  .chargeBtn,
+  .sendToBarBtn {
+    font-size: 15px;
   }
 
   .sheet {

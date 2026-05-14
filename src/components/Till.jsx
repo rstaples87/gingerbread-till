@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, getOrderTotal, orderToItems, mixerServesPerDrink, tabTotal } from '../utils'
+import { fmt, getOrderTotal, orderToItems, mixerServesPerDrink, tabTotal, localSessionDateString } from '../utils'
+import { supabase } from '../supabase'
+import { enqueueSyncQueueItem, isLikelyNetworkFailure } from '../syncQueue'
 import styles from './Till.module.css'
 
 function getPortionLabel(product) {
@@ -16,7 +18,7 @@ export default function Till({
   products, productVariants, stock, stockItems, stockDefinitions, mixerStockIds, tillCategories,
   orders, updateOrder, clearOrder, activeOrderKey, switchOrder,
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
-  processCharge, showToast,
+  processCharge, showToast, currentStaff,
 }) {
   const [hiddenCats, setHiddenCats] = useState(() => {
     const list = tillCategories?.length ? [...tillCategories] : [...CATEGORIES]
@@ -349,6 +351,61 @@ export default function Till({
   const canConfirmCharge = !isCashConfirm || (hasTendered && tenderedValue >= total)
   const changeDue = isCashConfirm && hasTendered ? Math.max(0, tenderedValue - total) : 0
 
+  const buildBarOrderItems = () => {
+    const lines = []
+    for (const [id, line] of Object.entries(order)) {
+      const p = products.find(x => x.id === Number(id))
+      if (!p) continue
+      const qty = typeof line === 'number' ? line : (line?.qty || 0)
+      const spiritId = typeof line === 'object' ? line?.selectedStockId : null
+      const mixerId = typeof line === 'object' ? line?.selectedMixerId : null
+      const spiritName = spiritId ? stockItemById[spiritId]?.name : null
+      const mixerLine = mixerId ? mixerChoiceLabel(stockItemById[mixerId]?.name) : null
+      let name = p.name
+      if (spiritName && mixerLine) name = `${p.name} (${spiritName} · ${mixerLine})`
+      else if (spiritName) name = `${p.name} (${spiritName})`
+      else if (mixerLine) name = `${p.name} (${mixerLine})`
+      lines.push({ name, qty, price: Number(p.price) })
+    }
+    return lines
+  }
+
+  const handleSendToBar = async () => {
+    if (!isTab || !activeTab) return
+    if (!hasItems) {
+      showToast('Nothing to send')
+      return
+    }
+    const items = buildBarOrderItems()
+    const t = getOrderTotal(order, products)
+    const payload = {
+      tab_name: activeTab.name,
+      items,
+      total: Math.round(t * 100) / 100,
+      staff_name: currentStaff || 'Unknown',
+      status: 'pending',
+      session_date: localSessionDateString(),
+    }
+    if (!supabase) {
+      enqueueSyncQueueItem('bar_order', payload)
+      showToast('Order sent to bar')
+      return
+    }
+    try {
+      const { error } = await supabase.from('bar_orders').insert(payload)
+      if (error) throw error
+      showToast('Order sent to bar')
+    } catch (e) {
+      if (isLikelyNetworkFailure(e)) {
+        enqueueSyncQueueItem('bar_order', payload)
+        showToast('Order sent to bar')
+      } else {
+        console.warn(e)
+        showToast('Could not send to bar')
+      }
+    }
+  }
+
   return (
     <div className={styles.wrap}>
       {/* Tabs bar */}
@@ -535,7 +592,7 @@ export default function Till({
             </div>
           )}
           <div className={styles.actionBtnsWrap}>
-            <div className={styles.actionBtns}>
+            <div className={`${styles.actionBtns} ${isTab ? styles.actionBtnsThree : ''}`}>
               <button
                 type="button"
                 className={styles.tabBtn}
@@ -552,6 +609,16 @@ export default function Till({
               >
                 {isTab ? 'Add items' : 'Charge'}
               </button>
+              {isTab && (
+                <button
+                  type="button"
+                  className={styles.sendToBarBtn}
+                  disabled={!hasItems || tabLimitReached}
+                  onClick={handleSendToBar}
+                >
+                  Send to bar
+                </button>
+              )}
             </div>
             {isTab && hasItems && wouldExceedTabLimit && (
               <div className={styles.chargeLimitHint}>Adding these items would exceed the tab limit</div>

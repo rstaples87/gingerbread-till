@@ -19,80 +19,10 @@ import Stock from './components/Stock'
 import StaffLog from './components/StaffLog'
 import Sales from './components/Sales'
 import Settings from './components/Settings'
+import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
-
-const SYNC_QUEUE_KEY = 'bt_sync_queue'
-
-function readSyncQueue() {
-  try {
-    const raw = localStorage.getItem(SYNC_QUEUE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function writeSyncQueue(items) {
-  try {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(items))
-  } catch {}
-}
-
-function enqueueSyncQueueItem(type, payload) {
-  const queue = readSyncQueue()
-  queue.push({ type, payload, timestamp: Date.now() })
-  writeSyncQueue(queue)
-}
-
-function isLikelyNetworkFailure(err) {
-  if (!err) return false
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
-  const msg = String(err.message ?? err).toLowerCase()
-  if (msg.includes('failed to fetch')) return true
-  if (msg.includes('network')) return true
-  if (msg.includes('load failed')) return true
-  if (msg.includes('aborted')) return true
-  const name = err.name
-  if (name === 'TypeError' && msg.includes('fetch')) return true
-  return false
-}
-
-function maybeQueueSyncFailure(type, payload, err) {
-  if (!isLikelyNetworkFailure(err)) {
-    console.warn('Sync failed (not queued):', err?.message ?? err)
-    return
-  }
-  enqueueSyncQueueItem(type, payload)
-}
-
-async function flushSyncQueue() {
-  if (!supabase) return
-  const queue = readSyncQueue()
-  if (!queue.length) return
-  const remaining = []
-  for (const item of queue) {
-    try {
-      let res
-      if (item.type === 'transaction') {
-        res = await supabase.from('transactions').upsert(item.payload, { onConflict: 'id' })
-      } else if (item.type === 'stock') {
-        res = await supabase.from('stock_items').upsert(item.payload, { onConflict: 'stock_key' })
-      } else if (item.type === 'till_stock') {
-        res = await supabase.from('till_stock').upsert(item.payload, { onConflict: 'product_id' })
-      } else {
-        remaining.push(item)
-        continue
-      }
-      if (res?.error) remaining.push(item)
-    } catch {
-      remaining.push(item)
-    }
-  }
-  writeSyncQueue(remaining)
-}
+import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
 
 function normaliseProductRow(row) {
   return {
@@ -996,6 +926,7 @@ export default function App() {
         openTabsCount={hydratedTabs.length}
       />
       {view === 'till'  && <Till  {...sharedProps} />}
+      {view === 'bar'  && <BarView showToast={showToast} />}
       {view === 'tabs'  && <TabsView {...sharedProps} />}
       {view === 'stock' && <Stock  {...sharedProps} />}
       {view === 'staff' && <StaffLog {...sharedProps} />}

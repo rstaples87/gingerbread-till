@@ -1,5 +1,14 @@
 export const fmt = n => '£' + Number(n).toFixed(2)
 
+/** Local calendar date YYYY-MM-DD for bar_orders.session_date */
+export function localSessionDateString() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 /**
  * Human-readable counted quantity for stock items with optional displayUnit
  * (used in Stock take + stock report). Sized packs use "qty x …", simple plurals use "qty …".
