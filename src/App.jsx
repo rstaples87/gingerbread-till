@@ -515,35 +515,52 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase) return undefined
+
+    // Realtime: same explicit INSERT/UPDATE/DELETE pattern as BarView bar_orders (see BarView.jsx).
+    const onTabsChange = (payload) => {
+      const et = payload.eventType ?? payload.event
+      setOpenTabs(prev => mergeTabsRealtime(prev, payload))
+      const id = String(payload.new?.id ?? payload.old?.id ?? '')
+      if (et === 'INSERT' && id) {
+        setOrders(prev => (prev[id] != null ? prev : { ...prev, [id]: {} }))
+      }
+      if (et === 'DELETE' && id) {
+        setOrders(prev => {
+          if (prev[id] == null) return prev
+          const n = { ...prev }
+          delete n[id]
+          return n
+        })
+        if (activeOrderKeyRef.current === id) setActiveOrderKey('quick')
+      }
+    }
+
+    const onTransactionsChange = (payload) => {
+      setTransactions(prev => mergeTransactionsRealtime(prev, payload))
+    }
+
+    const onTillStockChange = (payload) => {
+      setStockRaw(prev => mergeTillStockMapRealtime(prev, payload))
+    }
+
+    const onProductsChange = (payload) => {
+      setProducts(prev => mergeProductsRealtime(prev, payload))
+    }
+
     const channel = supabase
-      .channel('till_main_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
-        setProducts(prev => mergeProductsRealtime(prev, payload))
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'till_stock' }, (payload) => {
-        setStockRaw(prev => mergeTillStockMapRealtime(prev, payload))
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
-        setTransactions(prev => mergeTransactionsRealtime(prev, payload))
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tabs' }, (payload) => {
-        setOpenTabs(prev => mergeTabsRealtime(prev, payload))
-        const et = payload.eventType
-        const id = String(payload.new?.id ?? payload.old?.id ?? '')
-        if (et === 'INSERT' && id) {
-          setOrders(prev => (prev[id] != null ? prev : { ...prev, [id]: {} }))
-        }
-        if (et === 'DELETE' && id) {
-          setOrders(prev => {
-            if (prev[id] == null) return prev
-            const n = { ...prev }
-            delete n[id]
-            return n
-          })
-          if (activeOrderKeyRef.current === id) setActiveOrderKey('quick')
-        }
-      })
+      .channel('table-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tabs' }, onTabsChange)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tabs' }, onTabsChange)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tabs' }, onTabsChange)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, onTransactionsChange)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions' }, onTransactionsChange)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'transactions' }, onTransactionsChange)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'till_stock' }, onTillStockChange)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'till_stock' }, onTillStockChange)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'till_stock' }, onTillStockChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onProductsChange)
       .subscribe()
+
     return () => {
       supabase.removeChannel(channel)
     }

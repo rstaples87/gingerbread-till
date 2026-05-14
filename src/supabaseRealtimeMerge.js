@@ -60,7 +60,7 @@ export function normaliseTabRowLive(row) {
 }
 
 export function mergeProductsRealtime(prev, payload) {
-  const eventType = payload.eventType || payload.event
+  const eventType = payload.eventType ?? payload.event
   const newRow = payload.new
   const oldRow = payload.old
   const id = Number(newRow?.id ?? oldRow?.id)
@@ -83,7 +83,7 @@ export function mergeProductsRealtime(prev, payload) {
 }
 
 export function mergeTillStockMapRealtime(prev, payload) {
-  const eventType = payload.eventType || payload.event
+  const eventType = payload.eventType ?? payload.event
   const newRow = payload.new
   const oldRow = payload.old
   const pid = Number(newRow?.product_id ?? oldRow?.product_id)
@@ -129,7 +129,7 @@ export function mergeTransactionsRealtime(prev, payload) {
 }
 
 export function mergeTabsRealtime(prev, payload) {
-  const eventType = payload.eventType || payload.event
+  const eventType = payload.eventType ?? payload.event
   const newRow = payload.new
   const oldRow = payload.old
   const id = String(newRow?.id ?? oldRow?.id ?? '')
