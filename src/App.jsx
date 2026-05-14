@@ -384,15 +384,28 @@ function deleteTabFromSupabase(tabId) {
     .catch(err => maybeQueueSyncFailure('tabs_delete', { id: tabId }, err))
 }
 
-async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter) {
-  console.log('[Realtime] loadTabsFromSupabase: start')
-  if (!supabase) return
+async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, options = {}) {
+  console.log('[Realtime] loadTabsFromSupabase: start', options)
+  if (!supabase) return []
+  // No session_date or other filters — full table. Retries help read-after-write when Realtime fires before SELECT sees the row.
+  const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
+  let lastData = null
+  let lastError = null
   try {
-    const { data, error } = await supabase.from('tabs').select('*').order('opened_at', { ascending: true })
-    console.log('[Realtime] loadTabsFromSupabase: response', { data, error })
-    if (error) throw error
-    if (!data?.length) return
-    const tabs = data.map(row => normaliseTabRowLive(row)).filter(Boolean)
+    for (let i = 0; i < retryDelaysMs.length; i++) {
+      const wait = retryDelaysMs[i]
+      if (wait > 0) await new Promise(r => setTimeout(r, wait))
+      const { data, error } = await supabase.from('tabs').select('*').order('opened_at', { ascending: true })
+      console.log('[Realtime] loadTabsFromSupabase: response', { attempt: i + 1, data, error })
+      lastData = data
+      lastError = error
+      if (error) throw error
+      if (data?.length) break
+    }
+    const rows = lastData ?? []
+    const tabs = rows.length
+      ? rows.map(row => normaliseTabRowLive(row)).filter(Boolean)
+      : []
     setOpenTabs(tabs)
     setOrders(prev => {
       const next = { ...prev }
@@ -413,8 +426,10 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter) {
     if (maxSuffix > 0) {
       setTabIdCounter(c => Math.max(Number(c) || 0, maxSuffix + 1))
     }
+    return tabs
   } catch (err) {
     console.warn('loadTabsFromSupabase failed:', err?.message || err)
+    return []
   }
 }
 
@@ -520,7 +535,7 @@ export default function App() {
     // Realtime: refetch full rows on change (avoids payload column / normalise mismatches). BarView bar_orders unchanged.
     const onTabsChange = async (payload) => {
       console.log('[Realtime] tabs event received:', payload)
-      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
+      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, { retryOnEmpty: true })
     }
 
     const onTransactionsChange = async (payload) => {
