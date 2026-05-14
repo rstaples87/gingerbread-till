@@ -385,7 +385,7 @@ function deleteTabFromSupabase(tabId) {
 }
 
 async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, options = {}) {
-  console.log('[Realtime] loadTabsFromSupabase: start', options)
+  console.log('[Realtime] loadTabsFromSupabase: start')
   if (!supabase) return []
   // No session_date or other filters — full table. Retries help read-after-write when Realtime fires before SELECT sees the row.
   const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
@@ -533,18 +533,18 @@ export default function App() {
     if (!supabase) return undefined
 
     // Realtime: refetch full rows on change (avoids payload column / normalise mismatches). BarView bar_orders unchanged.
-    const onTabsChange = async (payload) => {
-      console.log('[Realtime] tabs event received:', payload)
-      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, { retryOnEmpty: true })
+    const onTabsChange = async () => {
+      console.log('[Realtime] tabs event received')
+      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
     }
 
-    const onTransactionsChange = async (payload) => {
-      console.log('[Realtime] transactions event received:', payload)
+    const onTransactionsChange = async () => {
+      console.log('[Realtime] transactions event received')
       await loadTransactionsFromSupabase(setTransactions)
     }
 
-    const onTillStockChange = async (payload) => {
-      console.log('[Realtime] till_stock event received:', payload)
+    const onTillStockChange = async () => {
+      console.log('[Realtime] till_stock event received')
       await loadTillStockFromSupabase(setStockRaw)
     }
 
