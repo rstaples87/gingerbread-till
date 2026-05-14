@@ -540,8 +540,9 @@ export default function App() {
 
   const commitItemsToTab = useCallback((tabId) => {
     const order = orders[tabId] || {}
+    if (Object.keys(order).length === 0) return false
     const tabRow = openTabs.find(t => t.id === tabId)
-    if (!tabRow) return
+    if (!tabRow) return false
     const limit = tabRow.limit ?? DEFAULT_TAB_LIMIT
     const orderTotal = getOrderTotal(order, products)
     const currentTabTotal = tabTotal(tabRow)
@@ -550,7 +551,7 @@ export default function App() {
       showToast(
         `Cannot add items to ${tabRow.name}: current tab ${fmt(currentTabTotal)} plus ${fmt(orderTotal)} (${fmt(projectedTotal)} total) exceeds limit ${fmt(limit)}.`,
       )
-      return
+      return false
     }
     setOpenTabs(prev => prev.map(tab => {
       if (tab.id !== tabId) return tab
@@ -592,6 +593,7 @@ export default function App() {
     }))
     clearOrder(tabId)
     showToast('Items added to ' + (tabRow.name || 'tab'))
+    return true
   }, [orders, products, productVariants, stockDefinitions, openTabs, setOpenTabs, setStock, setStockItems, clearOrder, showToast])
 
   const settleTab = useCallback((tabId, payment, extras = {}) => {

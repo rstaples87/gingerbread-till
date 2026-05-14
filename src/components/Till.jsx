@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
 import { fmt, getOrderTotal, orderToItems, mixerServesPerDrink, tabTotal, localSessionDateString } from '../utils'
 import { supabase } from '../supabase'
-import { enqueueSyncQueueItem, isLikelyNetworkFailure } from '../syncQueue'
 import styles from './Till.module.css'
 
 function getPortionLabel(product) {
@@ -18,7 +17,7 @@ export default function Till({
   products, productVariants, stock, stockItems, stockDefinitions, mixerStockIds, tillCategories,
   orders, updateOrder, clearOrder, activeOrderKey, switchOrder,
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
-  processCharge, showToast, currentStaff,
+  processCharge, showToast, currentStaff, settleTab,
 }) {
   const [hiddenCats, setHiddenCats] = useState(() => {
     const list = tillCategories?.length ? [...tillCategories] : [...CATEGORIES]
@@ -33,7 +32,18 @@ export default function Till({
   const [cashTendered, setCashTendered] = useState('')
   const [variantSheet, setVariantSheet] = useState(null) // { productId, label, options, deduct, needsMixer }
   const [mixerSheet, setMixerSheet] = useState(null) // { productId, spiritStockId, options }
+  const [settleModalOpen, setSettleModalOpen] = useState(false)
+  const [settleModalTabId, setSettleModalTabId] = useState(null)
+  const [settlePayment, setSettlePayment] = useState('cash')
+  const [settleCashTendered, setSettleCashTendered] = useState('')
+  const [postAddBdsPrompt, setPostAddBdsPrompt] = useState(null) // { payload } for bar_orders insert
+  const [postSendBdsPrompt, setPostSendBdsPrompt] = useState(false)
+  const [tabOrderNotes, setTabOrderNotes] = useState('')
   const stockItemById = Object.fromEntries(stockDefinitions.map(i => [i.id, i]))
+
+  useEffect(() => {
+    setTabOrderNotes('')
+  }, [activeOrderKey])
 
   const order = orders[activeOrderKey] || {}
   const categories = tillCategories?.length ? tillCategories : CATEGORIES
@@ -297,7 +307,6 @@ export default function Till({
   }
 
   const handleCharge = () => {
-    if (isTab) { commitItemsToTab(activeOrderKey); return }
     setConfPayment(payment)
     setCashTendered('')
     setChargeModal(true)
@@ -351,7 +360,55 @@ export default function Till({
   const canConfirmCharge = !isCashConfirm || (hasTendered && tenderedValue >= total)
   const changeDue = isCashConfirm && hasTendered ? Math.max(0, tenderedValue - total) : 0
 
-  const buildBarOrderItems = () => {
+  const canSettleNow =
+    Boolean(activeTab) && (tabCommittedTotal > 0 || (hasItems && !wouldExceedTabLimit))
+
+  const closeSettleModal = () => {
+    setSettleModalOpen(false)
+    setSettleModalTabId(null)
+    setSettleCashTendered('')
+  }
+
+  const openSettleModal = () => {
+    if (!activeTab) return
+    if (hasItems) {
+      if (wouldExceedTabLimit) {
+        showToast('Cannot settle: items would exceed the tab limit')
+        return
+      }
+      const committed = commitItemsToTab(activeOrderKey)
+      if (!committed) return
+    } else if (tabCommittedTotal <= 0) {
+      return
+    }
+    setSettleModalTabId(activeOrderKey)
+    setSettlePayment('cash')
+    setSettleCashTendered('')
+    setTimeout(() => setSettleModalOpen(true), 0)
+  }
+
+  const settleTabForModal = settleModalTabId ? openTabs.find(t => t.id === settleModalTabId) : null
+  const settleModalTotal = settleTabForModal ? tabTotal(settleTabForModal) : 0
+  const settleTenderedValue = parseFloat(settleCashTendered)
+  const settleHasTendered = settleCashTendered.trim() !== '' && !Number.isNaN(settleTenderedValue)
+  const settleIsCash = settlePayment === 'cash'
+  const settleAmountTooLow = settleIsCash && settleHasTendered && settleTenderedValue < settleModalTotal
+  const settleCanConfirm = !settleIsCash || (settleHasTendered && settleTenderedValue >= settleModalTotal)
+  const settleChangeDue = settleIsCash && settleHasTendered ? Math.max(0, settleTenderedValue - settleModalTotal) : 0
+
+  const confirmSettleTill = () => {
+    if (!settleModalTabId || !settleTabForModal) {
+      closeSettleModal()
+      return
+    }
+    const extras = settlePayment === 'cash' && settleHasTendered
+      ? { tenderedAmount: settleTenderedValue, changeGiven: settleChangeDue }
+      : {}
+    settleTab(settleModalTabId, settlePayment, extras)
+    closeSettleModal()
+  }
+
+  const buildBarOrderItemsFromPanel = () => {
     const lines = []
     for (const [id, line] of Object.entries(order)) {
       const p = products.find(x => x.id === Number(id))
@@ -370,40 +427,73 @@ export default function Till({
     return lines
   }
 
-  const handleSendToBar = async () => {
-    if (!isTab || !activeTab) return
-    if (!hasItems) {
-      showToast('Nothing to send')
-      return
-    }
-    const items = buildBarOrderItems()
+  const buildBarOrderPayloadFromPanel = () => {
+    if (!isTab || !activeTab) return null
+    const items = buildBarOrderItemsFromPanel()
+    if (!items.length) return null
     const t = getOrderTotal(order, products)
-    const payload = {
+    const noteTrim = tabOrderNotes.trim()
+    return {
       tab_name: activeTab.name,
       items,
       total: Math.round(t * 100) / 100,
       staff_name: currentStaff || 'Unknown',
       status: 'pending',
       session_date: localSessionDateString(),
+      notes: noteTrim ? noteTrim : null,
     }
-    if (!supabase) {
-      enqueueSyncQueueItem('bar_order', payload)
-      showToast('Order sent to bar')
-      return
+  }
+
+  const insertBarOrderPayload = async (payload) => {
+    if (!payload || !supabase) {
+      showToast('Could not send to BDS')
+      return false
     }
     try {
       const { error } = await supabase.from('bar_orders').insert(payload)
       if (error) throw error
-      showToast('Order sent to bar')
+      return true
     } catch (e) {
-      if (isLikelyNetworkFailure(e)) {
-        enqueueSyncQueueItem('bar_order', payload)
-        showToast('Order sent to bar')
-      } else {
-        console.warn(e)
-        showToast('Could not send to bar')
-      }
+      console.warn(e)
+      showToast('Could not send to BDS')
+      return false
     }
+  }
+
+  const handleAddItemsClick = () => {
+    if (!hasItems || wouldExceedTabLimit || !isTab || !activeTab) return
+    const payload = buildBarOrderPayloadFromPanel()
+    if (!payload) return
+    const ok = commitItemsToTab(activeOrderKey)
+    if (ok) {
+      setTabOrderNotes('')
+      setPostAddBdsPrompt({ payload })
+    }
+  }
+
+  const confirmPostAddSendToBds = async () => {
+    const payload = postAddBdsPrompt?.payload
+    setPostAddBdsPrompt(null)
+    if (!payload) return
+    const ok = await insertBarOrderPayload(payload)
+    if (ok) showToast('Order sent to BDS')
+  }
+
+  const handleSendToBar = async () => {
+    if (!isTab || !activeTab || !hasItems) return
+    const payload = buildBarOrderPayloadFromPanel()
+    if (!payload) return
+    const ok = await insertBarOrderPayload(payload)
+    if (!ok) return
+    setTabOrderNotes('')
+    showToast('Order sent to BDS')
+    setPostSendBdsPrompt(true)
+  }
+
+  const confirmPostSendAddToTab = () => {
+    setPostSendBdsPrompt(false)
+    setTabOrderNotes('')
+    commitItemsToTab(activeOrderKey)
   }
 
   return (
@@ -560,6 +650,19 @@ export default function Till({
             })
           )}
         </div>
+        {isTab && (
+          <div className={styles.orderNoteWrap}>
+            <input
+              className={styles.orderNoteInput}
+              type="text"
+              maxLength={500}
+              placeholder="Add a note for the bar (e.g. no ice)..."
+              value={tabOrderNotes}
+              onChange={(e) => setTabOrderNotes(e.target.value)}
+              aria-label="Note for Bar Display System"
+            />
+          </div>
+        )}
         <div className={styles.orderFooter}>
           <div className={styles.totalRow}>
             <span className={styles.totalLabel}>Total</span>
@@ -592,36 +695,57 @@ export default function Till({
             </div>
           )}
           <div className={styles.actionBtnsWrap}>
-            <div className={`${styles.actionBtns} ${isTab ? styles.actionBtnsThree : ''}`}>
-              <button
-                type="button"
-                className={styles.tabBtn}
-                disabled={!hasItems || isTab}
-                onClick={handleAddToTab}
-              >
-                Add to tab ↑
-              </button>
-              <button
-                type="button"
-                className={styles.chargeBtn}
-                disabled={!hasItems || (isTab && wouldExceedTabLimit)}
-                onClick={handleCharge}
-              >
-                {isTab ? 'Add items' : 'Charge'}
-              </button>
-              {isTab && (
+            {isTab ? (
+              <>
+                <div className={`${styles.actionBtns} ${styles.actionBtnsThree}`}>
+                  <button
+                    type="button"
+                    className={styles.tabBtn}
+                    disabled={!hasItems || wouldExceedTabLimit}
+                    onClick={handleAddItemsClick}
+                  >
+                    Add items
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.settleNowBtn}
+                    disabled={!canSettleNow}
+                    onClick={openSettleModal}
+                  >
+                    Settle now
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.sendToBarBtn}
+                    disabled={!hasItems}
+                    onClick={handleSendToBar}
+                  >
+                    Send to BDS
+                  </button>
+                </div>
+                {hasItems && wouldExceedTabLimit && (
+                  <div className={styles.chargeLimitHint}>Adding these items would exceed the tab limit</div>
+                )}
+              </>
+            ) : (
+              <div className={styles.actionBtns}>
                 <button
                   type="button"
-                  className={styles.sendToBarBtn}
-                  disabled={!hasItems || tabLimitReached}
-                  onClick={handleSendToBar}
+                  className={styles.tabBtn}
+                  disabled={!hasItems}
+                  onClick={handleAddToTab}
                 >
-                  Send to bar
+                  Add to tab ↑
                 </button>
-              )}
-            </div>
-            {isTab && hasItems && wouldExceedTabLimit && (
-              <div className={styles.chargeLimitHint}>Adding these items would exceed the tab limit</div>
+                <button
+                  type="button"
+                  className={styles.chargeBtn}
+                  disabled={!hasItems}
+                  onClick={handleCharge}
+                >
+                  Charge
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -778,6 +902,138 @@ export default function Till({
             <div className={styles.sheetBtns}>
               <button className={styles.cancelBtn} onClick={closeChargeModal}>Cancel</button>
               <button className={styles.confirmBtn} onClick={confirmCharge} disabled={!canConfirmCharge}>Confirm charge</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settleModalOpen && settleTabForModal && (
+        <div className={styles.overlay} onClick={closeSettleModal}>
+          <div className={styles.sheet} onClick={e => e.stopPropagation()}>
+            <div className={styles.sheetTitle}>Settle tab</div>
+            <div className={styles.sheetAmount}>{fmt(settleModalTotal)}</div>
+            <div className={styles.sheetItems}>
+              {settleTabForModal.items.length
+                ? settleTabForModal.items.map((i) => `${i.qty}× ${i.name}`).join('\n')
+                : 'No items'}
+            </div>
+            <div className={styles.sheetPayLabel}>Payment method</div>
+            <div className={`${styles.sheetPayRow} ${styles.sheetPayRowThree}`}>
+              {['cash', 'card', 'account'].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`${styles.sheetPayBtn} ${settlePayment === type ? styles.sheetPayActive : ''}`}
+                  onClick={() => setSettlePayment(type)}
+                >
+                  {type === 'cash' ? '💵 Cash' : type === 'card' ? '💳 Card' : '📋 Account'}
+                </button>
+              ))}
+            </div>
+            {settlePayment === 'cash' && (
+              <div className={styles.cashTenderSection}>
+                <div className={styles.cashTenderLabel}>Cash tendered</div>
+                <div className={styles.quickRow}>
+                  {[5, 10, 20, 50].map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      className={styles.quickBtn}
+                      onClick={() => setSettleCashTendered(String(amount))}
+                    >
+                      {fmt(amount)}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  className={styles.cashInput}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={settleCashTendered}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/[^0-9.]/g, '')
+                    setSettleCashTendered(next)
+                  }}
+                />
+                {settleHasTendered && (
+                  <div className={styles.changeRow}>
+                    <span className={styles.changeLabel}>Change due</span>
+                    {settleAmountTooLow ? (
+                      <span className={styles.amountLow}>Amount too low</span>
+                    ) : (
+                      <span className={styles.changeAmount}>{fmt(settleChangeDue)}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className={styles.sheetBtns}>
+              <button type="button" className={styles.cancelBtn} onClick={closeSettleModal}>Cancel</button>
+              <button
+                type="button"
+                className={styles.confirmBtn}
+                onClick={confirmSettleTill}
+                disabled={!settleCanConfirm}
+              >
+                Settle &amp; close tab
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {postAddBdsPrompt && (
+        <div className={styles.overlay} onClick={() => setPostAddBdsPrompt(null)}>
+          <div
+            className={styles.sheet}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="post-add-bds-title"
+            onClick={e => e.stopPropagation()}
+          >
+            <p id="post-add-bds-title" className={styles.promptMessage}>
+              Send this round to the Bar Display System?
+            </p>
+            <div className={styles.sheetBtns}>
+              <button type="button" className={styles.cancelBtn} onClick={() => setPostAddBdsPrompt(null)}>
+                No thanks
+              </button>
+              <button
+                type="button"
+                className={`${styles.confirmBtn} ${styles.promptNavyBtn}`}
+                onClick={confirmPostAddSendToBds}
+              >
+                Yes, send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {postSendBdsPrompt && (
+        <div className={styles.overlay} onClick={() => setPostSendBdsPrompt(false)}>
+          <div
+            className={styles.sheet}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="post-send-bds-title"
+            onClick={e => e.stopPropagation()}
+          >
+            <p id="post-send-bds-title" className={styles.promptMessage}>
+              Add these items to the tab?
+            </p>
+            <div className={styles.sheetBtns}>
+              <button type="button" className={styles.cancelBtn} onClick={() => setPostSendBdsPrompt(false)}>
+                No thanks
+              </button>
+              <button
+                type="button"
+                className={`${styles.confirmBtn} ${styles.promptNavyBtn}`}
+                onClick={confirmPostSendAddToTab}
+              >
+                Yes, add to tab
+              </button>
             </div>
           </div>
         </div>

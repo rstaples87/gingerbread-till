@@ -101,6 +101,18 @@
   padding: 2px 0;
 }
 
+.cardNote {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  background: #f8f9fb;
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+}
+
 .totalRow {
   display: flex;
   justify-content: space-between;

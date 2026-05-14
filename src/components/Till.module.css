@@ -200,6 +200,29 @@
 .oiQty { font-size: 14px; font-weight: 700; min-width: 18px; text-align: center; }
 .oiSub { font-size: 12px; font-weight: 600; min-width: 44px; text-align: right; color: var(--navy); }
 
+.orderNoteWrap {
+  flex-shrink: 0;
+  padding: 0 14px 10px;
+  border-top: 1px solid #f5f5f5;
+}
+.orderNoteInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--text);
+  outline: none;
+}
+.orderNoteInput::placeholder {
+  color: #9aa2ad;
+}
+.orderNoteInput:focus {
+  border-color: var(--accent);
+}
+
 /* Footer */
 .orderFooter { padding: 10px 14px 14px; border-top: 1px solid #f0f0f0; flex-shrink: 0; }
 .totalRow { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
@@ -224,6 +247,13 @@
 .actionBtnsWrap { width: 100%; }
 .actionBtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .actionBtnsThree { grid-template-columns: 1fr 1fr 1fr; }
+.actionBtnsThree .tabBtn,
+.actionBtnsThree .settleNowBtn,
+.actionBtnsThree .sendToBarBtn {
+  font-size: 12px;
+  padding: 11px 4px;
+  line-height: 1.2;
+}
 .chargeLimitHint {
   font-size: 11px;
   color: var(--red);
@@ -245,6 +275,23 @@
 }
 .chargeBtn:disabled { opacity: 0.28; cursor: default; }
 .chargeBtn:active:not(:disabled) { opacity: 0.8; }
+.settleNowBtn {
+  padding: 13px;
+  background: var(--navy);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 700;
+  transition: opacity 0.15s;
+}
+.settleNowBtn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+.settleNowBtn:active:not(:disabled) {
+  opacity: 0.88;
+}
 .sendToBarBtn {
   padding: 13px;
   background: var(--white);
@@ -329,6 +376,14 @@
 .sheetItems { font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 6px; white-space: pre-line; }
 .sheetPayLabel { font-size: 12px; color: #aaa; margin-bottom: 6px; margin-top: 12px; }
 .sheetPayRow { display: flex; gap: 8px; margin-bottom: 16px; }
+.sheetPayRowThree { flex-wrap: nowrap; }
+.sheetPayRowThree .sheetPayBtn {
+  flex: 1;
+  min-width: 0;
+  padding-left: 6px;
+  padding-right: 6px;
+  font-size: 12px;
+}
 .sheetPayBtn {
   flex: 1; padding: 10px; border-radius: 9px;
   border: 1px solid #e0e0e0; background: #f8f8f8;
@@ -386,6 +441,23 @@
   border-radius: var(--radius); font-size: 14px; font-weight: 600; width: 100%;
 }
 .confirmBtn:disabled { opacity: 0.45; cursor: default; }
+
+.promptMessage {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.45;
+  margin: 4px 0 22px;
+}
+.promptNavyBtn {
+  background: #1a1a2e !important;
+  border: none !important;
+  color: #fff !important;
+}
+.promptNavyBtn:active:not(:disabled) {
+  opacity: 0.9;
+}
 
 /* New tab */
 .newTabTitle { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
@@ -495,6 +567,10 @@
     padding: 6px 18px;
   }
 
+  .orderNoteWrap {
+    padding: 0 18px 12px;
+  }
+
   .orderItem {
     padding: 8px 0;
   }
@@ -532,7 +608,9 @@
   .payBtn,
   .tabBtn,
   .chargeBtn,
+  .settleNowBtn,
   .sendToBarBtn,
+  .promptNavyBtn,
   .cancelBtn,
   .confirmBtn,
   .sheetPayBtn,
@@ -543,8 +621,16 @@
 
   .tabBtn,
   .chargeBtn,
+  .settleNowBtn,
   .sendToBarBtn {
     font-size: 15px;
+  }
+
+  .actionBtnsThree .tabBtn,
+  .actionBtnsThree .settleNowBtn,
+  .actionBtnsThree .sendToBarBtn {
+    font-size: 13px;
+    padding: 12px 6px;
   }
 
   .sheet {

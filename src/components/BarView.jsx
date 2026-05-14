@@ -37,7 +37,7 @@ export default function BarView({ showToast }) {
       .order('sent_at', { ascending: false })
     if (error) {
       console.warn('Bar orders load:', error.message)
-      showToast?.('Could not load bar orders')
+      showToast?.('Could not load Bar Display System orders')
       return
     }
     setRows(data || [])
@@ -107,7 +107,7 @@ export default function BarView({ showToast }) {
   if (!supabase) {
     return (
       <div className={styles.wrap}>
-        <p className={styles.missing}>Bar view needs Supabase (set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY).</p>
+        <p className={styles.missing}>Bar Display System needs Supabase (set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY).</p>
       </div>
     )
   }
@@ -115,7 +115,7 @@ export default function BarView({ showToast }) {
   return (
     <div className={styles.wrap}>
       <div className={styles.head}>
-        <h1 className={styles.title}>Bar</h1>
+        <h1 className={styles.title}>Bar Display System</h1>
         <p className={styles.sub}>{sessionDate}</p>
       </div>
       <div className={styles.scroll}>
@@ -176,6 +176,11 @@ function OrderCard({ row, onUnderwayChange, onCompleteChange }) {
           <li key={idx}>{it.qty}× {it.name}</li>
         ))}
       </ul>
+      {row.notes && String(row.notes).trim() !== '' && (
+        <div className={styles.cardNote}>
+          📝 {String(row.notes).trim()}
+        </div>
+      )}
       <div className={styles.totalRow}>
         <span>Total</span>
         <span className={styles.total}>{fmt(Number(row.total) || 0)}</span>
