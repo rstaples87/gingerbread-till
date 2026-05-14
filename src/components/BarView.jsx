@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { fmt, localSessionDateString } from '../utils'
+import { mergeBarOrdersRealtime } from './barViewRealtime'
 import styles from './BarView.module.css'
 
 function parseItems(items) {
@@ -25,7 +26,7 @@ function formatSentTime(sentAt) {
 
 export default function BarView({ showToast }) {
   const [rows, setRows] = useState([])
-  const sessionDate = localSessionDateString()
+  const [sessionDate] = useState(() => localSessionDateString())
 
   const loadOrders = useCallback(async () => {
     if (!supabase) return
@@ -46,20 +47,30 @@ export default function BarView({ showToast }) {
   useEffect(() => {
     if (!supabase) return undefined
     loadOrders()
+
+    // Realtime: bar_orders must be in publication supabase_realtime (see migrations/20260213120000_bar_orders.sql).
+    const onRealtimeChange = (payload) => {
+      setRows((prev) => mergeBarOrdersRealtime(prev, payload, sessionDate))
+    }
+
     const channel = supabase
-      .channel('bar_orders_live')
+      .channel('bar_orders_display')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'bar_orders' },
-        () => {
-          loadOrders()
-        },
+        { event: 'INSERT', schema: 'public', table: 'bar_orders' },
+        onRealtimeChange,
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'bar_orders' },
+        onRealtimeChange,
       )
       .subscribe()
+
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [loadOrders])
+  }, [loadOrders, sessionDate])
 
   const updateStatus = async (id, status) => {
     if (!supabase) return
@@ -68,7 +79,6 @@ export default function BarView({ showToast }) {
       showToast?.('Update failed')
       return
     }
-    loadOrders()
   }
 
   const onUnderwayChange = (row, checked) => {
@@ -97,7 +107,6 @@ export default function BarView({ showToast }) {
       return
     }
     showToast?.('Completed orders cleared')
-    loadOrders()
   }
 
   const active = rows.filter((r) => r.status !== 'complete')
