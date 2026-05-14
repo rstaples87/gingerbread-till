@@ -366,6 +366,7 @@ function tabRowForSupabase(tab) {
 
 /** New tab row — explicit insert so creation always hits PostgREST INSERT. */
 function insertTabToSupabase(tab) {
+  console.log('[tabs] insertTabToSupabase called, supabase:', supabase ? 'defined' : 'NULL')
   if (!supabase || !tab?.id) return
   const row = tabRowForSupabase(tab)
   supabase
@@ -716,6 +717,7 @@ export default function App() {
     const newTab = { id, name, items: [], openedAt: new Date(), staff: activeSaleStaff }
     setOpenTabs(prev => [...prev, newTab])
     setOrders(prev => ({ ...prev, [id]: {} }))
+    console.log('[tabs] openNewTabEntry calling insertTabToSupabase for', newTab.id)
     insertTabToSupabase(newTab)
     switchOrder(id)
     showToast('Tab opened: ' + name)
