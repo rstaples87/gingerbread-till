@@ -64,8 +64,10 @@ export async function flushSyncQueue() {
         res = await supabase.from('bar_orders').insert(item.payload)
       } else if (item.type === 'tabs') {
         res = await supabase.from('tabs').upsert(item.payload, { onConflict: 'id' })
+        console.log('[tabs] flush upsert response', { payload: item.payload, data: res?.data, error: res?.error })
       } else if (item.type === 'tabs_delete') {
         res = await supabase.from('tabs').delete().eq('id', item.payload.id)
+        console.log('[tabs] flush delete response', { payload: item.payload, data: res?.data, error: res?.error })
       } else {
         remaining.push(item)
         continue

@@ -366,10 +366,14 @@ function syncTabToSupabase(tab) {
   supabase
     .from('tabs')
     .upsert(row, { onConflict: 'id' })
-    .then(({ error }) => {
+    .then(({ data, error }) => {
+      console.log('[tabs] upsert response', { row, data, error })
       if (error) maybeQueueSyncFailure('tabs', row, error)
     })
-    .catch(err => maybeQueueSyncFailure('tabs', row, err))
+    .catch(err => {
+      console.log('[tabs] upsert catch', { row, err })
+      maybeQueueSyncFailure('tabs', row, err)
+    })
 }
 
 function deleteTabFromSupabase(tabId) {
@@ -378,10 +382,14 @@ function deleteTabFromSupabase(tabId) {
     .from('tabs')
     .delete()
     .eq('id', tabId)
-    .then(({ error }) => {
+    .then(({ data, error }) => {
+      console.log('[tabs] delete response', { tabId, data, error })
       if (error) maybeQueueSyncFailure('tabs_delete', { id: tabId }, error)
     })
-    .catch(err => maybeQueueSyncFailure('tabs_delete', { id: tabId }, err))
+    .catch(err => {
+      console.log('[tabs] delete catch', { tabId, err })
+      maybeQueueSyncFailure('tabs_delete', { id: tabId }, err)
+    })
 }
 
 async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, options = {}) {
