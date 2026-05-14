@@ -350,12 +350,11 @@ function syncTransactionToSupabase(tx) {
     .catch(err => maybeQueueSyncFailure('transaction', row, err))
 }
 
-function syncTabToSupabase(tab) {
-  if (!supabase || !tab?.id) return
+function tabRowForSupabase(tab) {
   const openedAt =
     tab.openedAt instanceof Date ? tab.openedAt.toISOString()
       : tab.openedAt ?? new Date().toISOString()
-  const row = {
+  return {
     id: tab.id,
     name: tab.name ?? '',
     items: tab.items ?? [],
@@ -363,6 +362,28 @@ function syncTabToSupabase(tab) {
     staff: tab.staff ?? null,
     tab_limit: tab.limit != null && tab.limit !== '' ? Number(tab.limit) : null,
   }
+}
+
+/** New tab row — explicit insert so creation always hits PostgREST INSERT. */
+function insertTabToSupabase(tab) {
+  if (!supabase || !tab?.id) return
+  const row = tabRowForSupabase(tab)
+  supabase
+    .from('tabs')
+    .insert(row)
+    .then(({ data, error }) => {
+      console.log('[tabs] insert response', { row, data, error })
+      if (error) maybeQueueSyncFailure('tabs', row, error)
+    })
+    .catch(err => {
+      console.log('[tabs] insert catch', { row, err })
+      maybeQueueSyncFailure('tabs', row, err)
+    })
+}
+
+function syncTabToSupabase(tab) {
+  if (!supabase || !tab?.id) return
+  const row = tabRowForSupabase(tab)
   supabase
     .from('tabs')
     .upsert(row, { onConflict: 'id' })
@@ -695,7 +716,7 @@ export default function App() {
     const newTab = { id, name, items: [], openedAt: new Date(), staff: activeSaleStaff }
     setOpenTabs(prev => [...prev, newTab])
     setOrders(prev => ({ ...prev, [id]: {} }))
-    queueMicrotask(() => syncTabToSupabase(newTab))
+    insertTabToSupabase(newTab)
     switchOrder(id)
     showToast('Tab opened: ' + name)
     return id
