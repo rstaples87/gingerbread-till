@@ -62,6 +62,10 @@ export async function flushSyncQueue() {
         res = await supabase.from('till_stock').upsert(item.payload, { onConflict: 'product_id' })
       } else if (item.type === 'bar_order') {
         res = await supabase.from('bar_orders').insert(item.payload)
+      } else if (item.type === 'tabs') {
+        res = await supabase.from('tabs').upsert(item.payload, { onConflict: 'id' })
+      } else if (item.type === 'tabs_delete') {
+        res = await supabase.from('tabs').delete().eq('id', item.payload.id)
       } else {
         remaining.push(item)
         continue

@@ -23,6 +23,14 @@ import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
 import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
+import {
+  mergeProductsRealtime,
+  mergeTillStockMapRealtime,
+  mergeTransactionsRealtime,
+  mergeTabsRealtime,
+  normaliseTabRowLive,
+  normaliseTransactionRowLive,
+} from './supabaseRealtimeMerge'
 
 function normaliseProductRow(row) {
   return {
@@ -343,6 +351,84 @@ function syncTransactionToSupabase(tx) {
     .catch(err => maybeQueueSyncFailure('transaction', row, err))
 }
 
+function syncTabToSupabase(tab) {
+  if (!supabase || !tab?.id) return
+  const openedAt =
+    tab.openedAt instanceof Date ? tab.openedAt.toISOString()
+      : tab.openedAt ?? new Date().toISOString()
+  const row = {
+    id: tab.id,
+    name: tab.name ?? '',
+    items: tab.items ?? [],
+    opened_at: openedAt,
+    staff: tab.staff ?? null,
+    tab_limit: tab.limit != null && tab.limit !== '' ? Number(tab.limit) : null,
+  }
+  supabase
+    .from('tabs')
+    .upsert(row, { onConflict: 'id' })
+    .then(({ error }) => {
+      if (error) maybeQueueSyncFailure('tabs', row, error)
+    })
+    .catch(err => maybeQueueSyncFailure('tabs', row, err))
+}
+
+function deleteTabFromSupabase(tabId) {
+  if (!supabase || !tabId) return
+  supabase
+    .from('tabs')
+    .delete()
+    .eq('id', tabId)
+    .then(({ error }) => {
+      if (error) maybeQueueSyncFailure('tabs_delete', { id: tabId }, error)
+    })
+    .catch(err => maybeQueueSyncFailure('tabs_delete', { id: tabId }, err))
+}
+
+async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase.from('tabs').select('*').order('opened_at', { ascending: true })
+    if (error) throw error
+    if (!data?.length) return
+    const tabs = data.map(row => normaliseTabRowLive(row)).filter(Boolean)
+    setOpenTabs(tabs)
+    setOrders(prev => {
+      const next = { ...prev }
+      for (const t of tabs) {
+        if (next[t.id] === undefined) next[t.id] = {}
+      }
+      for (const k of Object.keys(next)) {
+        if (k === 'quick') continue
+        if (!tabs.some(t => t.id === k)) delete next[k]
+      }
+      return next
+    })
+    let maxSuffix = 0
+    for (const t of tabs) {
+      const m = /^tab_(\d+)$/.exec(String(t.id))
+      if (m) maxSuffix = Math.max(maxSuffix, Number(m[1]))
+    }
+    if (maxSuffix > 0) {
+      setTabIdCounter(c => Math.max(Number(c) || 0, maxSuffix + 1))
+    }
+  } catch (err) {
+    console.warn('loadTabsFromSupabase failed:', err?.message || err)
+  }
+}
+
+async function loadTransactionsFromSupabase(setTransactions) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase.from('transactions').select('*').order('time', { ascending: false })
+    if (error) throw error
+    if (!data?.length) return
+    setTransactions(data.map(row => normaliseTransactionRowLive(row)).filter(Boolean))
+  } catch (err) {
+    console.warn('loadTransactionsFromSupabase failed:', err?.message || err)
+  }
+}
+
 export default function App() {
   const [view, setView] = useState('till')
   const [products, setProducts] = useLocalStorage('bt_products', INITIAL_PRODUCTS)
@@ -374,6 +460,8 @@ export default function App() {
   const [openTabs, setOpenTabs] = useLocalStorage('bt_open_tabs', [])
   const [orders, setOrders] = useLocalStorage('bt_orders', { quick: {} })
   const [activeOrderKey, setActiveOrderKey] = useLocalStorage('bt_active_order', 'quick')
+  const activeOrderKeyRef = useRef(activeOrderKey)
+  activeOrderKeyRef.current = activeOrderKey
   const [attendanceLog, setAttendanceLog] = useLocalStorage('bt_attendance_log', [])
   const [currentlyIn, setCurrentlyIn] = useLocalStorage('bt_currently_in', [])
   const [staffOverlayOpen, setStaffOverlayOpen] = useState(false)
@@ -416,10 +504,50 @@ export default function App() {
       await loadStockFromSupabase(setStockItemsRaw, setStockDefinitions)
       if (cancelled) return
       await loadTillStockFromSupabase(setStockRaw)
+      if (cancelled) return
+      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
+      if (cancelled) return
+      await loadTransactionsFromSupabase(setTransactions)
       stockSyncReadyRef.current = true
     })()
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (!supabase) return undefined
+    const channel = supabase
+      .channel('till_main_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+        setProducts(prev => mergeProductsRealtime(prev, payload))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'till_stock' }, (payload) => {
+        setStockRaw(prev => mergeTillStockMapRealtime(prev, payload))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
+        setTransactions(prev => mergeTransactionsRealtime(prev, payload))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tabs' }, (payload) => {
+        setOpenTabs(prev => mergeTabsRealtime(prev, payload))
+        const et = payload.eventType
+        const id = String(payload.new?.id ?? payload.old?.id ?? '')
+        if (et === 'INSERT' && id) {
+          setOrders(prev => (prev[id] != null ? prev : { ...prev, [id]: {} }))
+        }
+        if (et === 'DELETE' && id) {
+          setOrders(prev => {
+            if (prev[id] == null) return prev
+            const n = { ...prev }
+            delete n[id]
+            return n
+          })
+          if (activeOrderKeyRef.current === id) setActiveOrderKey('quick')
+        }
+      })
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [setProducts, setStockRaw, setTransactions, setOpenTabs, setOrders, setActiveOrderKey])
 
   // Migrate legacy staff storage: ["Alice", "Ben"] -> [{ name, pin, role }]
   useEffect(() => {
@@ -513,6 +641,7 @@ export default function App() {
 
   const addTransaction = useCallback((tx) => {
     setTransactions(prev => [tx, ...prev])
+    syncTransactionToSupabase(tx)
   }, [setTransactions])
 
   const updateOrder = useCallback((key, updater) => {
@@ -533,6 +662,7 @@ export default function App() {
     const newTab = { id, name, items: [], openedAt: new Date(), staff: activeSaleStaff }
     setOpenTabs(prev => [...prev, newTab])
     setOrders(prev => ({ ...prev, [id]: {} }))
+    queueMicrotask(() => syncTabToSupabase(newTab))
     switchOrder(id)
     showToast('Tab opened: ' + name)
     return id
@@ -553,44 +683,50 @@ export default function App() {
       )
       return false
     }
-    setOpenTabs(prev => prev.map(tab => {
-      if (tab.id !== tabId) return tab
-      const newItems = [...tab.items]
-      Object.entries(order).forEach(([id, line]) => {
-        const qty = typeof line === 'number' ? line : (line?.qty || 0)
-        const selectedStockId = typeof line === 'object' ? line?.selectedStockId : null
-        const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
-        const p = products.find(x => x.id === Number(id))
-        if (!p) return
-        if (selectedStockId && productVariants[p.id]) {
-          const deduct = productVariants[p.id].deduct || 1
-          const amount = deduct * qty
-          setStockItems(prev => ({ ...prev, [selectedStockId]: Math.max(0, (prev[selectedStockId] ?? 0) - amount) }))
-        } else {
-          const unitsToDeduct = p.bottleYield ? (qty / p.bottleYield) : qty
-          setStock(s => ({ ...s, [p.id]: Math.max(0, (s[p.id] ?? 0) - unitsToDeduct) }))
-        }
-        if (selectedMixerId) {
-          const mixerDef = stockDefinitions.find(s => s.id === selectedMixerId)
-          const mixDed = mixerBottleDeductionForLine(p.id, qty, mixerDef?.bottleYield)
-          setStockItems(prev => ({
-            ...prev,
-            [selectedMixerId]: Math.max(0, (prev[selectedMixerId] ?? 0) - mixDed),
-          }))
-        }
-        const ex = newItems.find(i => {
-          const sameProduct = i.productId === p.id || (!i.productId && i.name === p.name)
-          return (
-            sameProduct &&
-            (i.selectedStockId ?? null) === (selectedStockId ?? null) &&
-            (i.selectedMixerId ?? null) === (selectedMixerId ?? null)
-          )
+    setOpenTabs(prev => {
+      let updatedTab = null
+      const next = prev.map(tab => {
+        if (tab.id !== tabId) return tab
+        const newItems = [...tab.items]
+        Object.entries(order).forEach(([id, line]) => {
+          const qty = typeof line === 'number' ? line : (line?.qty || 0)
+          const selectedStockId = typeof line === 'object' ? line?.selectedStockId : null
+          const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
+          const p = products.find(x => x.id === Number(id))
+          if (!p) return
+          if (selectedStockId && productVariants[p.id]) {
+            const deduct = productVariants[p.id].deduct || 1
+            const amount = deduct * qty
+            setStockItems(prev => ({ ...prev, [selectedStockId]: Math.max(0, (prev[selectedStockId] ?? 0) - amount) }))
+          } else {
+            const unitsToDeduct = p.bottleYield ? (qty / p.bottleYield) : qty
+            setStock(s => ({ ...s, [p.id]: Math.max(0, (s[p.id] ?? 0) - unitsToDeduct) }))
+          }
+          if (selectedMixerId) {
+            const mixerDef = stockDefinitions.find(s => s.id === selectedMixerId)
+            const mixDed = mixerBottleDeductionForLine(p.id, qty, mixerDef?.bottleYield)
+            setStockItems(prev => ({
+              ...prev,
+              [selectedMixerId]: Math.max(0, (prev[selectedMixerId] ?? 0) - mixDed),
+            }))
+          }
+          const ex = newItems.find(i => {
+            const sameProduct = i.productId === p.id || (!i.productId && i.name === p.name)
+            return (
+              sameProduct &&
+              (i.selectedStockId ?? null) === (selectedStockId ?? null) &&
+              (i.selectedMixerId ?? null) === (selectedMixerId ?? null)
+            )
+          })
+          if (ex) ex.qty += qty
+          else newItems.push({ name: p.name, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId })
         })
-        if (ex) ex.qty += qty
-        else newItems.push({ name: p.name, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId })
+        updatedTab = { ...tab, items: newItems }
+        return updatedTab
       })
-      return { ...tab, items: newItems }
-    }))
+      if (updatedTab) queueMicrotask(() => syncTabToSupabase(updatedTab))
+      return next
+    })
     clearOrder(tabId)
     showToast('Items added to ' + (tabRow.name || 'tab'))
     return true
@@ -615,6 +751,7 @@ export default function App() {
         changeGiven: extras.changeGiven ?? null,
       } : {}),
     })
+    deleteTabFromSupabase(tabId)
     setOpenTabs(prev => prev.filter(t => t.id !== tabId))
     setOrders(prev => { const n = { ...prev }; delete n[tabId]; return n })
     if (activeOrderKey === tabId) switchOrder('quick')
@@ -622,6 +759,7 @@ export default function App() {
   }, [openTabs, addTransaction, activeSaleStaff, setOpenTabs, setOrders, activeOrderKey, switchOrder, showToast])
 
   const cancelTab = useCallback((tabId) => {
+    deleteTabFromSupabase(tabId)
     setOpenTabs(prev => prev.filter(t => t.id !== tabId))
     setOrders(prev => { const n = { ...prev }; delete n[tabId]; return n })
     if (activeOrderKey === tabId) switchOrder('quick')
@@ -668,37 +806,42 @@ export default function App() {
       } : {}),
     }
     addTransaction(tx)
-    syncTransactionToSupabase(tx)
     clearOrder('quick')
     showToast('Sale recorded — ' + fmt(total))
   }, [orders, products, productVariants, stockDefinitions, addTransaction, activeSaleStaff, setStock, setStockItems, clearOrder, showToast])
 
   const voidTransaction = useCallback((txId) => {
-    setTransactions(prev => prev.map(tx => {
-      if (tx.id !== txId || tx.voided) return tx
-      tx.items.forEach(i => {
-        const p = products.find(x => x.id === i.productId || x.name === i.name)
-        if (p) {
-          if (i.selectedStockId && productVariants[p.id]) {
-            const deduct = productVariants[p.id].deduct || 1
-            const amount = deduct * i.qty
-            setStockItems(prev => ({ ...prev, [i.selectedStockId]: (prev[i.selectedStockId] ?? 0) + amount }))
-          } else {
-            const unitsToRestore = p.bottleYield ? (i.qty / p.bottleYield) : i.qty
-            setStock(s => ({ ...s, [p.id]: (s[p.id] ?? 0) + unitsToRestore }))
+    setTransactions(prev => {
+      let voided = null
+      const next = prev.map(tx => {
+        if (tx.id !== txId || tx.voided) return tx
+        tx.items.forEach(i => {
+          const p = products.find(x => x.id === i.productId || x.name === i.name)
+          if (p) {
+            if (i.selectedStockId && productVariants[p.id]) {
+              const deduct = productVariants[p.id].deduct || 1
+              const amount = deduct * i.qty
+              setStockItems(prev => ({ ...prev, [i.selectedStockId]: (prev[i.selectedStockId] ?? 0) + amount }))
+            } else {
+              const unitsToRestore = p.bottleYield ? (i.qty / p.bottleYield) : i.qty
+              setStock(s => ({ ...s, [p.id]: (s[p.id] ?? 0) + unitsToRestore }))
+            }
+            if (i.selectedMixerId) {
+              const mixerDef = stockDefinitions.find(s => s.id === i.selectedMixerId)
+              const mixDed = mixerBottleDeductionForLine(p.id, i.qty, mixerDef?.bottleYield)
+              setStockItems(prev => ({
+                ...prev,
+                [i.selectedMixerId]: (prev[i.selectedMixerId] ?? 0) + mixDed,
+              }))
+            }
           }
-          if (i.selectedMixerId) {
-            const mixerDef = stockDefinitions.find(s => s.id === i.selectedMixerId)
-            const mixDed = mixerBottleDeductionForLine(p.id, i.qty, mixerDef?.bottleYield)
-            setStockItems(prev => ({
-              ...prev,
-              [i.selectedMixerId]: (prev[i.selectedMixerId] ?? 0) + mixDed,
-            }))
-          }
-        }
+        })
+        voided = { ...tx, voided: true, voidedAt: new Date() }
+        return voided
       })
-      return { ...tx, voided: true, voidedAt: new Date() }
-    }))
+      if (voided) queueMicrotask(() => syncTransactionToSupabase(voided))
+      return next
+    })
     showToast('Transaction voided — stock restored')
   }, [products, productVariants, stockDefinitions, setTransactions, setStock, setStockItems, showToast])
 
@@ -748,7 +891,12 @@ export default function App() {
   const updateTabLimit = useCallback((tabId, newLimit) => {
     const n = Number(newLimit)
     if (Number.isNaN(n)) return
-    setOpenTabs(prev => prev.map(t => (t.id === tabId ? { ...t, limit: n } : t)))
+    setOpenTabs(prev => {
+      const next = prev.map(t => (t.id === tabId ? { ...t, limit: n } : t))
+      const row = next.find(t => t.id === tabId)
+      if (row) queueMicrotask(() => syncTabToSupabase(row))
+      return next
+    })
     showToast(`Tab limit updated to ${fmt(n)}`)
   }, [setOpenTabs, showToast])
 
