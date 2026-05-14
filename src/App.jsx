@@ -25,9 +25,6 @@ import Toast from './components/Toast'
 import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
 import {
   mergeProductsRealtime,
-  mergeTillStockMapRealtime,
-  mergeTransactionsRealtime,
-  mergeTabsRealtime,
   normaliseTabRowLive,
   normaliseTransactionRowLive,
 } from './supabaseRealtimeMerge'
@@ -242,9 +239,11 @@ function syncTillStockToSupabase(map) {
 }
 
 async function loadTillStockFromSupabase(setStockRaw) {
+  console.log('[Realtime] loadTillStockFromSupabase: start')
   if (!supabase) return
   try {
     const { data, error } = await supabase.from('till_stock').select('product_id, qty')
+    console.log('[Realtime] loadTillStockFromSupabase: response', { data, error })
     if (error) throw error
     if (!data?.length) return
     setStockRaw(prev => {
@@ -386,9 +385,11 @@ function deleteTabFromSupabase(tabId) {
 }
 
 async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter) {
+  console.log('[Realtime] loadTabsFromSupabase: start')
   if (!supabase) return
   try {
     const { data, error } = await supabase.from('tabs').select('*').order('opened_at', { ascending: true })
+    console.log('[Realtime] loadTabsFromSupabase: response', { data, error })
     if (error) throw error
     if (!data?.length) return
     const tabs = data.map(row => normaliseTabRowLive(row)).filter(Boolean)
@@ -418,9 +419,11 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter) {
 }
 
 async function loadTransactionsFromSupabase(setTransactions) {
+  console.log('[Realtime] loadTransactionsFromSupabase: start')
   if (!supabase) return
   try {
     const { data, error } = await supabase.from('transactions').select('*').order('time', { ascending: false })
+    console.log('[Realtime] loadTransactionsFromSupabase: response', { data, error })
     if (error) throw error
     if (!data?.length) return
     setTransactions(data.map(row => normaliseTransactionRowLive(row)).filter(Boolean))
@@ -460,8 +463,6 @@ export default function App() {
   const [openTabs, setOpenTabs] = useLocalStorage('bt_open_tabs', [])
   const [orders, setOrders] = useLocalStorage('bt_orders', { quick: {} })
   const [activeOrderKey, setActiveOrderKey] = useLocalStorage('bt_active_order', 'quick')
-  const activeOrderKeyRef = useRef(activeOrderKey)
-  activeOrderKeyRef.current = activeOrderKey
   const [attendanceLog, setAttendanceLog] = useLocalStorage('bt_attendance_log', [])
   const [currentlyIn, setCurrentlyIn] = useLocalStorage('bt_currently_in', [])
   const [staffOverlayOpen, setStaffOverlayOpen] = useState(false)
@@ -516,31 +517,20 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return undefined
 
-    // Realtime: same explicit INSERT/UPDATE/DELETE pattern as BarView bar_orders (see BarView.jsx).
-    const onTabsChange = (payload) => {
-      const et = payload.eventType ?? payload.event
-      setOpenTabs(prev => mergeTabsRealtime(prev, payload))
-      const id = String(payload.new?.id ?? payload.old?.id ?? '')
-      if (et === 'INSERT' && id) {
-        setOrders(prev => (prev[id] != null ? prev : { ...prev, [id]: {} }))
-      }
-      if (et === 'DELETE' && id) {
-        setOrders(prev => {
-          if (prev[id] == null) return prev
-          const n = { ...prev }
-          delete n[id]
-          return n
-        })
-        if (activeOrderKeyRef.current === id) setActiveOrderKey('quick')
-      }
+    // Realtime: refetch full rows on change (avoids payload column / normalise mismatches). BarView bar_orders unchanged.
+    const onTabsChange = async (payload) => {
+      console.log('[Realtime] tabs event received:', payload)
+      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
     }
 
-    const onTransactionsChange = (payload) => {
-      setTransactions(prev => mergeTransactionsRealtime(prev, payload))
+    const onTransactionsChange = async (payload) => {
+      console.log('[Realtime] transactions event received:', payload)
+      await loadTransactionsFromSupabase(setTransactions)
     }
 
-    const onTillStockChange = (payload) => {
-      setStockRaw(prev => mergeTillStockMapRealtime(prev, payload))
+    const onTillStockChange = async (payload) => {
+      console.log('[Realtime] till_stock event received:', payload)
+      await loadTillStockFromSupabase(setStockRaw)
     }
 
     const onProductsChange = (payload) => {
@@ -559,12 +549,15 @@ export default function App() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'till_stock' }, onTillStockChange)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'till_stock' }, onTillStockChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onProductsChange)
-      .subscribe()
+
+    channel.subscribe((status) => {
+      console.log('[Realtime] channel status:', status)
+    })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [setProducts, setStockRaw, setTransactions, setOpenTabs, setOrders, setActiveOrderKey])
+  }, [setProducts, setStockRaw, setTransactions, setOpenTabs, setOrders, setTabIdCounter])
 
   // Migrate legacy staff storage: ["Alice", "Ben"] -> [{ name, pin, role }]
   useEffect(() => {
