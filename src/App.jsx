@@ -62,23 +62,9 @@ async function seedSupabase() {
     }
     const { data: stockSample } = await supabase.from('stock_items').select('stock_key').limit(1)
     if (!stockSample?.length) {
-      const seedRows = INITIAL_STOCK_ITEMS.map(s => ({
-        stock_key: s.id,
-        qty: s.stock ?? 0,
-        name: s.name,
-        category: s.category,
-        unit: s.unit,
-        bottle_yield: s.bottleYield ?? null,
-        display_unit: s.displayUnit ?? null,
-      }))
-      const { error: stockSeedError } = await supabase.from('stock_items').insert(seedRows)
-      logSupabaseWrite('stock_items', 'insert', stockSeedError)
-      if (stockSeedError) {
-        const fallbackRes = await supabase.from('stock_items').insert(
-          INITIAL_STOCK_ITEMS.map(s => ({ stock_key: s.id, qty: s.stock ?? 0 })),
-        )
-        logSupabaseWrite('stock_items', 'insert', fallbackRes.error)
-      }
+      const seedRows = INITIAL_STOCK_ITEMS.map(s => ({ stock_key: s.id, qty: s.stock ?? 0 }))
+      const stockSeedRes = await supabase.from('stock_items').insert(seedRows)
+      logSupabaseWrite('stock_items', 'insert', stockSeedRes.error)
     }
   } catch (err) {
     console.warn('Supabase seed failed:', err?.message || err)
@@ -110,36 +96,58 @@ function syncStockToSupabase(map) {
   }
 }
 
-async function loadStockFromSupabase(setStockItemsRaw, setStockDefinitions) {
-  if (!supabase) return
+async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
+  console.log('[Realtime] loadStockItemsFromSupabase: start')
+  if (!supabase) return 0
+  const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
+  let lastData = null
   try {
-    let { data, error } = await supabase
-      .from('stock_items')
-      .select('stock_key, qty, name, category, unit, bottle_yield, display_unit')
-    if (error) {
-      const fallback = await supabase.from('stock_items').select('stock_key, qty')
-      data = fallback.data
-      error = fallback.error
+    for (let i = 0; i < retryDelaysMs.length; i++) {
+      const wait = retryDelaysMs[i]
+      if (wait > 0) await new Promise(r => setTimeout(r, wait))
+      const { data, error } = await supabase.from('stock_items').select('stock_key, qty')
+      console.log('[Realtime] loadStockItemsFromSupabase: response', { attempt: i + 1, data, error })
+      if (error) throw error
+      lastData = data
+      if (data?.length) break
     }
-    if (error) throw error
-    if (!data?.length) return
+    const rows = lastData ?? []
+    if (!rows.length) return 0
     setStockItemsRaw(prev => {
       const next = { ...prev }
-      for (const row of data) {
+      for (const row of rows) {
         next[row.stock_key] = Number(row.qty)
       }
       return next
     })
-    const hasDefinitions = data.some(row => row.name || row.category || row.unit || row.bottle_yield != null)
-    if (hasDefinitions) {
-      setStockDefinitions(prev => {
-        const fallbackById = Object.fromEntries(prev.map(item => [item.id, item]))
-        return data.map(row => normaliseStockDefinitionRow(row, fallbackById[row.stock_key]))
-      })
-    }
+    console.log('[Realtime] loadStockItemsFromSupabase: applied', rows.length, 'stock item row(s)')
+    return rows.length
   } catch (err) {
-    console.warn('loadStockFromSupabase failed:', err?.message || err)
+    console.warn('loadStockItemsFromSupabase failed:', err?.message || err)
+    return 0
   }
+}
+
+/** Optional metadata columns — skipped silently if schema only has stock_key/qty. */
+async function tryLoadStockDefinitionsFromSupabase(setStockDefinitions) {
+  if (!supabase) return
+  const { data, error } = await supabase
+    .from('stock_items')
+    .select('stock_key, name, category, unit, bottle_yield, display_unit')
+  if (error || !data?.length) return
+  const hasDefinitions = data.some(row => row.name || row.category || row.unit || row.bottle_yield != null)
+  if (!hasDefinitions) return
+  setStockDefinitions(prev => {
+    const fallbackById = Object.fromEntries(prev.map(item => [item.id, item]))
+    return data.map(row => normaliseStockDefinitionRow(row, fallbackById[row.stock_key]))
+  })
+}
+
+/** Bootstrap: stock take qty from Supabase; definitions merged only when optional columns exist. */
+async function loadStockFromSupabase(setStockItemsRaw, setStockDefinitions) {
+  const count = await loadStockItemsFromSupabase(setStockItemsRaw)
+  if (setStockDefinitions) await tryLoadStockDefinitionsFromSupabase(setStockDefinitions)
+  return count
 }
 
 /** Single till menu product row — used on every stock change and sale deduction. */
@@ -198,15 +206,24 @@ async function loadTillStockFromSupabase(setStockRaw, options = {}) {
 
 async function upsertStockDefinitionToSupabase(item, qty) {
   if (!supabase) return
-  const { error } = await supabase.from('stock_items').upsert({
+  const qtyVal = Number(qty ?? item.stock ?? 0)
+  const fullRow = {
     stock_key: item.id,
-    qty: Number(qty ?? item.stock ?? 0),
+    qty: qtyVal,
     name: item.name,
     category: item.category,
     unit: item.unit,
     bottle_yield: item.bottleYield == null ? null : Number(item.bottleYield),
     display_unit: item.displayUnit || null,
-  }, { onConflict: 'stock_key' })
+  }
+  let { error } = await supabase.from('stock_items').upsert(fullRow, { onConflict: 'stock_key' })
+  if (error) {
+    const minimal = await supabase.from('stock_items').upsert(
+      { stock_key: item.id, qty: qtyVal },
+      { onConflict: 'stock_key' },
+    )
+    error = minimal.error
+  }
   logSupabaseWrite('stock_items', 'upsert', error)
   if (error) throw error
 }
@@ -258,7 +275,7 @@ function syncTransactionToSupabase(tx) {
     })
 }
 
-/** Columns on public.tabs we may write: id, name, items, opened_at, tab_limit, settled (not staff until schema cache includes it). */
+/** Columns on public.tabs we may write: id, name, items, opened_at, tab_limit (settled tabs are deleted, not stored). */
 function tabRowForSupabase(tab) {
   const openedAt =
     tab.openedAt instanceof Date ? tab.openedAt.toISOString()
@@ -268,7 +285,6 @@ function tabRowForSupabase(tab) {
     name: tab.name ?? '',
     items: tab.items ?? [],
     opened_at: openedAt,
-    settled: false,
   }
   if (tab.limit != null && tab.limit !== '') {
     row.tab_limit = Number(tab.limit)
@@ -327,7 +343,6 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
       const { data, error } = await supabase
         .from('tabs')
         .select('*')
-        .eq('settled', false)
         .order('opened_at', { ascending: true })
       console.log('[Realtime] loadTabsFromSupabase: response', { attempt: i + 1, data, error })
       lastData = data
@@ -456,6 +471,8 @@ export default function App() {
   transactionsSetterRef.current = setTransactions
   const tillStockSetterRef = useRef(setStockRaw)
   tillStockSetterRef.current = setStockRaw
+  const stockItemsSetterRef = useRef(setStockItemsRaw)
+  stockItemsSetterRef.current = setStockItemsRaw
   const mixerStockIds = stockDefinitions.filter(item => item.category === 'Mixers').map(item => item.id)
   const tillCategories = uniqueNonEmpty([
     ...DEFAULT_TILL_CATEGORIES,
@@ -502,12 +519,11 @@ export default function App() {
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
-      console.log('[Realtime] tabs: supabase NULL — subscription not created (check VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)')
+      console.log('[Realtime] subscriptions skipped — supabase not configured')
       return undefined
     }
 
-    const channelName = tabsRealtimeChannelNameRef.current
-    console.log('[Realtime] tabs: creating channel', channelName)
+    const channels = []
 
     const onTabsChange = async (payload) => {
       console.log('[Realtime] tabs event received', payload?.eventType ?? payload?.event, payload)
@@ -515,79 +531,68 @@ export default function App() {
       await loadTabsFromSupabase(setTabs, setOrds, setCounter, { retryOnEmpty: true })
     }
 
-    const tabsChannel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tabs' }, onTabsChange)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tabs' }, onTabsChange)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tabs' }, onTabsChange)
-
-    tabsChannel.subscribe((status, err) => {
-      console.log('[Realtime] tabs channel status:', channelName, status, err ?? '')
-    })
-
-    return () => {
-      console.log('[Realtime] tabs: removing channel', channelName)
-      supabase.removeChannel(tabsChannel)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
-      console.log('[Realtime] transactions: supabase NULL — subscription not created')
-      return undefined
-    }
-
-    const channelName = 'till_realtime_transactions'
-    console.log('[Realtime] transactions: creating channel', channelName)
-
     const onTransactionsChange = async (payload) => {
       console.log('[Realtime] transactions event received', payload?.eventType ?? payload?.event, payload)
       await loadTransactionsFromSupabase(transactionsSetterRef.current, { retryOnEmpty: true })
     }
-
-    const txChannel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, onTransactionsChange)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions' }, onTransactionsChange)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'transactions' }, onTransactionsChange)
-
-    txChannel.subscribe((status, err) => {
-      console.log('[Realtime] transactions channel status:', channelName, status, err ?? '')
-    })
-
-    return () => {
-      console.log('[Realtime] transactions: removing channel', channelName)
-      supabase.removeChannel(txChannel)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
-      console.log('[Realtime] till_stock: supabase NULL — subscription not created')
-      return undefined
-    }
-
-    const channelName = 'till_realtime_stock'
-    console.log('[Realtime] till_stock: creating channel', channelName)
 
     const onTillStockChange = async (payload) => {
       console.log('[Realtime] till_stock event received', payload?.eventType ?? payload?.event, payload)
       await loadTillStockFromSupabase(tillStockSetterRef.current, { retryOnEmpty: true })
     }
 
-    const stockChannel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'till_stock' }, onTillStockChange)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'till_stock' }, onTillStockChange)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'till_stock' }, onTillStockChange)
+    const onStockItemsChange = async (payload) => {
+      console.log('[Realtime] stock_items event received', payload?.eventType ?? payload?.event, payload)
+      await loadStockItemsFromSupabase(stockItemsSetterRef.current, { retryOnEmpty: true })
+    }
 
-    stockChannel.subscribe((status, err) => {
-      console.log('[Realtime] till_stock channel status:', channelName, status, err ?? '')
-    })
+    const subscribeTable = (channelName, table, handler) => {
+      console.log(`[Realtime] ${table}: creating channel`, channelName)
+      const channel = supabase
+        .channel(channelName)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table }, handler)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table }, handler)
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, handler)
+      channel.subscribe((status, err) => {
+        console.log(`[Realtime] ${table} channel status:`, channelName, status, err ?? '')
+        if (status === 'CHANNEL_ERROR') {
+          console.error(
+            `[Realtime] ${table} channel error — ensure public.${table} is in supabase_realtime publication`,
+            err,
+          )
+        }
+      })
+      channels.push(channel)
+      return channel
+    }
+
+    const tabsChannelName = tabsRealtimeChannelNameRef.current
+    const txChannelName = 'till_realtime_transactions'
+    const tillStockChannelName = 'till_realtime_stock'
+    const stockItemsChannelName = 'till_realtime_stock_items'
+
+    subscribeTable(tabsChannelName, 'tabs', onTabsChange)
+    subscribeTable(txChannelName, 'transactions', onTransactionsChange)
+    subscribeTable(tillStockChannelName, 'till_stock', onTillStockChange)
+    subscribeTable(stockItemsChannelName, 'stock_items', onStockItemsChange)
+
+    console.log('[Realtime] subscribed channels:', [
+      tabsChannelName,
+      txChannelName,
+      tillStockChannelName,
+      stockItemsChannelName,
+    ])
 
     return () => {
-      console.log('[Realtime] till_stock: removing channel', channelName)
-      supabase.removeChannel(stockChannel)
+      console.log('[Realtime] removing channels:', [
+        tabsChannelName,
+        txChannelName,
+        tillStockChannelName,
+        stockItemsChannelName,
+      ])
+      for (const channel of channels) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [])
 

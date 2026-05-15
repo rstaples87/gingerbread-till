@@ -46,7 +46,6 @@ async function runWriteTabsTest() {
     name: '__debug_test__',
     items: [],
     opened_at: new Date().toISOString(),
-    settled: false,
   }
   const { error: insertError } = await supabase.from('tabs').insert(row)
   if (insertError) throw insertError
