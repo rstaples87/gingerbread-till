@@ -9,7 +9,7 @@ import {
   CATEGORIES as DEFAULT_TILL_CATEGORIES,
   STOCK_CATEGORIES as DEFAULT_STOCK_CATEGORIES,
 } from './data'
-import { supabase } from './supabase'
+import { supabase, isSupabaseConfigured } from './supabase'
 import { fmt, getOrderTotal, orderToItems, tabTotal, mixerBottleDeductionForLine } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
@@ -429,7 +429,11 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
     for (let i = 0; i < retryDelaysMs.length; i++) {
       const wait = retryDelaysMs[i]
       if (wait > 0) await new Promise(r => setTimeout(r, wait))
-      const { data, error } = await supabase.from('tabs').select('*').order('opened_at', { ascending: true })
+      const { data, error } = await supabase
+        .from('tabs')
+        .select('*')
+        .eq('settled', false)
+        .order('opened_at', { ascending: true })
       console.log('[Realtime] loadTabsFromSupabase: response', { attempt: i + 1, data, error })
       lastData = data
       lastError = error
@@ -460,6 +464,7 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
     if (maxSuffix > 0) {
       setTabIdCounter(c => Math.max(Number(c) || 0, maxSuffix + 1))
     }
+    console.log('[Realtime] loadTabsFromSupabase: applied', tabs.length, 'open tab(s)')
     return tabs
   } catch (err) {
     console.warn('loadTabsFromSupabase failed:', err?.message || err)
@@ -517,6 +522,15 @@ export default function App() {
   const [staffOverlayOpen, setStaffOverlayOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', visible: false })
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
+  const tabsLoadSettersRef = useRef({ setOpenTabs, setOrders, setTabIdCounter })
+  tabsLoadSettersRef.current = { setOpenTabs, setOrders, setTabIdCounter }
+  const tabsRealtimeChannelNameRef = useRef(null)
+  if (!tabsRealtimeChannelNameRef.current) {
+    const suffix = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(36).slice(2)}`
+    tabsRealtimeChannelNameRef.current = `till_realtime_tabs_${suffix}`
+  }
   const mixerStockIds = stockDefinitions.filter(item => item.category === 'Mixers').map(item => item.id)
   const tillCategories = uniqueNonEmpty([
     ...DEFAULT_TILL_CATEGORIES,
@@ -564,12 +578,40 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!supabase) return undefined
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('[Realtime] tabs: supabase NULL — subscription not created (check VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)')
+      return undefined
+    }
 
-    // Realtime: refetch full rows on change (avoids payload column / normalise mismatches). BarView bar_orders unchanged.
-    const onTabsChange = async () => {
-      console.log('[Realtime] tabs event received')
-      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
+    const channelName = tabsRealtimeChannelNameRef.current
+    console.log('[Realtime] tabs: creating channel', channelName)
+
+    const onTabsChange = async (payload) => {
+      console.log('[Realtime] tabs event received', payload?.eventType ?? payload?.event, payload)
+      const { setOpenTabs: setTabs, setOrders: setOrds, setTabIdCounter: setCounter } = tabsLoadSettersRef.current
+      await loadTabsFromSupabase(setTabs, setOrds, setCounter, { retryOnEmpty: true })
+    }
+
+    const tabsChannel = supabase
+      .channel(channelName)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tabs' }, onTabsChange)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tabs' }, onTabsChange)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tabs' }, onTabsChange)
+
+    tabsChannel.subscribe((status, err) => {
+      console.log('[Realtime] tabs channel status:', channelName, status, err ?? '')
+    })
+
+    return () => {
+      console.log('[Realtime] tabs: removing channel', channelName)
+      supabase.removeChannel(tabsChannel)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('[Realtime] till: supabase NULL — subscription not created')
+      return undefined
     }
 
     const onTransactionsChange = async () => {
@@ -586,11 +628,9 @@ export default function App() {
       setProducts(prev => mergeProductsRealtime(prev, payload))
     }
 
+    const channelName = 'till_realtime_stock_tx_products'
     const channel = supabase
-      .channel('table-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tabs' }, onTabsChange)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tabs' }, onTabsChange)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tabs' }, onTabsChange)
+      .channel(channelName)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, onTransactionsChange)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'transactions' }, onTransactionsChange)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'transactions' }, onTransactionsChange)
@@ -599,14 +639,14 @@ export default function App() {
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'till_stock' }, onTillStockChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onProductsChange)
 
-    channel.subscribe((status) => {
-      console.log('[Realtime] channel status:', status)
+    channel.subscribe((status, err) => {
+      console.log('[Realtime] till channel status:', channelName, status, err ?? '')
     })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [setProducts, setStockRaw, setTransactions, setOpenTabs, setOrders, setTabIdCounter])
+  }, [setProducts, setStockRaw, setTransactions])
 
   // Migrate legacy staff storage: ["Alice", "Ben"] -> [{ name, pin, role }]
   useEffect(() => {
