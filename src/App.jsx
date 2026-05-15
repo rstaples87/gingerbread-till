@@ -97,7 +97,6 @@ function syncStockToSupabase(map) {
 }
 
 async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
-  console.log('[Realtime] loadStockItemsFromSupabase: start')
   if (!supabase) return 0
   const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
   let lastData = null
@@ -106,7 +105,6 @@ async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
       const wait = retryDelaysMs[i]
       if (wait > 0) await new Promise(r => setTimeout(r, wait))
       const { data, error } = await supabase.from('stock_items').select('stock_key, qty')
-      console.log('[Realtime] loadStockItemsFromSupabase: response', { attempt: i + 1, data, error })
       if (error) throw error
       lastData = data
       if (data?.length) break
@@ -120,7 +118,6 @@ async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
       }
       return next
     })
-    console.log('[Realtime] loadStockItemsFromSupabase: applied', rows.length, 'stock item row(s)')
     return rows.length
   } catch (err) {
     console.warn('loadStockItemsFromSupabase failed:', err?.message || err)
@@ -176,7 +173,6 @@ function syncTillStockToSupabase(map) {
 }
 
 async function loadTillStockFromSupabase(setStockRaw, options = {}) {
-  console.log('[Realtime] loadTillStockFromSupabase: start')
   if (!supabase) return 0
   const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
   let lastData = null
@@ -185,7 +181,6 @@ async function loadTillStockFromSupabase(setStockRaw, options = {}) {
       const wait = retryDelaysMs[i]
       if (wait > 0) await new Promise(r => setTimeout(r, wait))
       const { data, error } = await supabase.from('till_stock').select('product_id, qty')
-      console.log('[Realtime] loadTillStockFromSupabase: response', { attempt: i + 1, data, error })
       if (error) throw error
       lastData = data
       if (data?.length) break
@@ -196,7 +191,6 @@ async function loadTillStockFromSupabase(setStockRaw, options = {}) {
       next[row.product_id] = Number(row.qty)
     }
     setStockRaw(next)
-    console.log('[Realtime] loadTillStockFromSupabase: applied', rows.length, 'stock row(s)')
     return rows.length
   } catch (err) {
     console.warn('loadTillStockFromSupabase failed:', err?.message || err)
@@ -330,12 +324,10 @@ function deleteTabFromSupabase(tabId) {
 }
 
 async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, options = {}) {
-  console.log('[Realtime] loadTabsFromSupabase: start')
   if (!supabase) return []
   // No session_date or other filters — full table. Retries help read-after-write when Realtime fires before SELECT sees the row.
   const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
   let lastData = null
-  let lastError = null
   try {
     for (let i = 0; i < retryDelaysMs.length; i++) {
       const wait = retryDelaysMs[i]
@@ -344,9 +336,7 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
         .from('tabs')
         .select('*')
         .order('opened_at', { ascending: true })
-      console.log('[Realtime] loadTabsFromSupabase: response', { attempt: i + 1, data, error })
       lastData = data
-      lastError = error
       if (error) throw error
       if (data?.length) break
     }
@@ -374,7 +364,6 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
     if (maxSuffix > 0) {
       setTabIdCounter(c => Math.max(Number(c) || 0, maxSuffix + 1))
     }
-    console.log('[Realtime] loadTabsFromSupabase: applied', tabs.length, 'open tab(s)')
     return tabs
   } catch (err) {
     console.warn('loadTabsFromSupabase failed:', err?.message || err)
@@ -383,7 +372,6 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
 }
 
 async function loadTransactionsFromSupabase(setTransactions, options = {}) {
-  console.log('[Realtime] loadTransactionsFromSupabase: start')
   if (!supabase) return 0
   const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
   let lastData = null
@@ -392,7 +380,6 @@ async function loadTransactionsFromSupabase(setTransactions, options = {}) {
       const wait = retryDelaysMs[i]
       if (wait > 0) await new Promise(r => setTimeout(r, wait))
       const { data, error } = await supabase.from('transactions').select('*').order('time', { ascending: false })
-      console.log('[Realtime] loadTransactionsFromSupabase: response', { attempt: i + 1, data, error })
       if (error) throw error
       lastData = data
       if (data?.length) break
@@ -402,7 +389,6 @@ async function loadTransactionsFromSupabase(setTransactions, options = {}) {
       ? rows.map(row => normaliseTransactionRowLive(row)).filter(Boolean)
       : []
     setTransactions(txs)
-    console.log('[Realtime] loadTransactionsFromSupabase: applied', txs.length, 'transaction(s)')
     return txs.length
   } catch (err) {
     console.warn('loadTransactionsFromSupabase failed:', err?.message || err)
@@ -519,44 +505,37 @@ export default function App() {
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
-      console.log('[Realtime] subscriptions skipped — supabase not configured')
       return undefined
     }
 
     const channels = []
 
-    const onTabsChange = async (payload) => {
-      console.log('[Realtime] tabs event received', payload?.eventType ?? payload?.event, payload)
+    const onTabsChange = async () => {
       const { setOpenTabs: setTabs, setOrders: setOrds, setTabIdCounter: setCounter } = tabsLoadSettersRef.current
       await loadTabsFromSupabase(setTabs, setOrds, setCounter, { retryOnEmpty: true })
     }
 
-    const onTransactionsChange = async (payload) => {
-      console.log('[Realtime] transactions event received', payload?.eventType ?? payload?.event, payload)
+    const onTransactionsChange = async () => {
       await loadTransactionsFromSupabase(transactionsSetterRef.current, { retryOnEmpty: true })
     }
 
-    const onTillStockChange = async (payload) => {
-      console.log('[Realtime] till_stock event received', payload?.eventType ?? payload?.event, payload)
+    const onTillStockChange = async () => {
       await loadTillStockFromSupabase(tillStockSetterRef.current, { retryOnEmpty: true })
     }
 
-    const onStockItemsChange = async (payload) => {
-      console.log('[Realtime] stock_items event received', payload?.eventType ?? payload?.event, payload)
+    const onStockItemsChange = async () => {
       await loadStockItemsFromSupabase(stockItemsSetterRef.current, { retryOnEmpty: true })
     }
 
     const subscribeTable = (channelName, table, handler) => {
-      console.log(`[Realtime] ${table}: creating channel`, channelName)
       const channel = supabase
         .channel(channelName)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table }, handler)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table }, handler)
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table }, handler)
       channel.subscribe((status, err) => {
-        console.log(`[Realtime] ${table} channel status:`, channelName, status, err ?? '')
         if (status === 'CHANNEL_ERROR') {
-          console.error(
+          console.warn(
             `[Realtime] ${table} channel error — ensure public.${table} is in supabase_realtime publication`,
             err,
           )
@@ -576,20 +555,7 @@ export default function App() {
     subscribeTable(tillStockChannelName, 'till_stock', onTillStockChange)
     subscribeTable(stockItemsChannelName, 'stock_items', onStockItemsChange)
 
-    console.log('[Realtime] subscribed channels:', [
-      tabsChannelName,
-      txChannelName,
-      tillStockChannelName,
-      stockItemsChannelName,
-    ])
-
     return () => {
-      console.log('[Realtime] removing channels:', [
-        tabsChannelName,
-        txChannelName,
-        tillStockChannelName,
-        stockItemsChannelName,
-      ])
       for (const channel of channels) {
         supabase.removeChannel(channel)
       }

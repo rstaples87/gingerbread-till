@@ -1,4 +1,4 @@
-/** Standard log for every Supabase mutation. */
+/** Log failed Supabase mutations only. */
 export function logSupabaseWrite(table, operation, error) {
-  console.log('[Supabase write]', table, operation, error ?? 'ok')
+  if (error) console.warn('[Supabase write]', table, operation, error)
 }
