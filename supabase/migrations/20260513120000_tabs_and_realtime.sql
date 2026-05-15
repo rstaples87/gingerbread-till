@@ -20,7 +20,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array['tabs', 'transactions', 'till_stock', 'products']
+  foreach t in array['tabs', 'transactions', 'till_stock']
   loop
     if to_regclass('public.' || t) is null then
       continue;

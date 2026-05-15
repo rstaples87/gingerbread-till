@@ -25,47 +25,9 @@ import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
 import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
 import {
-  mergeProductsRealtime,
   normaliseTabRowLive,
   normaliseTransactionRowLive,
 } from './supabaseRealtimeMerge'
-
-function normaliseProductRow(row) {
-  return {
-    id: Number(row.id),
-    name: row.name,
-    price: Number(row.price),
-    category: row.category,
-    stock: 0,
-  }
-}
-
-function serialiseVariantStockIds(variant) {
-  if (variant?.needsMixer) {
-    return {
-      main: variant.stockIds || [],
-      mixers: variant.mixerStockIds || [],
-    }
-  }
-  return variant?.stockIds || []
-}
-
-function normaliseVariantRow(row) {
-  const rawStockIds = row.stock_ids
-  const stockIds = Array.isArray(rawStockIds)
-    ? rawStockIds
-    : Array.isArray(rawStockIds?.main)
-      ? rawStockIds.main
-      : []
-  const mixerStockIds = Array.isArray(rawStockIds?.mixers) ? rawStockIds.mixers : []
-  return {
-    label: row.label || '',
-    stockIds,
-    deduct: Number(row.deduct ?? 1),
-    needsMixer: Boolean(row.needs_mixer),
-    ...(mixerStockIds.length ? { mixerStockIds } : {}),
-  }
-}
 
 function normaliseStockDefinitionRow(row, fallback) {
   return {
@@ -121,62 +83,6 @@ async function seedSupabase() {
   } catch (err) {
     console.warn('Supabase seed failed:', err?.message || err)
   }
-}
-
-async function loadProductsFromSupabase(setProducts, setProductVariants) {
-  if (!supabase) return
-  try {
-    const { data, error } = await supabase.from('products').select('id, name, price, category').order('id')
-    if (error) throw error
-    if (!data?.length) return
-    setProducts(data.map(normaliseProductRow))
-
-    const { data: variantRows, error: variantError } = await supabase
-      .from('product_variants')
-      .select('product_id, label, stock_ids, deduct, needs_mixer')
-    if (variantError) throw variantError
-    const variants = {}
-    for (const row of variantRows || []) {
-      variants[Number(row.product_id)] = normaliseVariantRow(row)
-    }
-    setProductVariants(variants)
-  } catch (err) {
-    console.warn('loadProductsFromSupabase failed:', err?.message || err)
-  }
-}
-
-async function loadCategoriesFromSupabase(setCategoryState) {
-  if (!supabase) return
-  try {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('name, type')
-      .order('created_at')
-    if (error) throw error
-    if (!data?.length) return
-    setCategoryState(prev => ({
-      till: uniqueNonEmpty([
-        ...(prev?.till || []),
-        ...data.filter(row => row.type === 'till').map(row => row.name),
-      ]),
-      stock: uniqueNonEmpty([
-        ...(prev?.stock || []),
-        ...data.filter(row => row.type === 'stock').map(row => row.name),
-      ]),
-    }))
-  } catch (err) {
-    console.warn('loadCategoriesFromSupabase failed:', err?.message || err)
-  }
-}
-
-async function saveCategoryToSupabase(type, name) {
-  if (!supabase) return
-  const { error } = await supabase.from('categories').insert({
-    name,
-    type,
-  })
-  logSupabaseWrite('categories', 'insert', error)
-  if (error) throw error
 }
 
 /** Single warehouse stock_items row (Stock take tab). */
@@ -288,47 +194,6 @@ async function loadTillStockFromSupabase(setStockRaw, options = {}) {
     console.warn('loadTillStockFromSupabase failed:', err?.message || err)
     return 0
   }
-}
-
-async function upsertProductToSupabase(product) {
-  if (!supabase) return
-  const { error } = await supabase.from('products').upsert({
-    id: Number(product.id),
-    name: product.name,
-    price: Number(product.price),
-    category: product.category,
-  }, { onConflict: 'id' })
-  logSupabaseWrite('products', 'upsert', error)
-  if (error) throw error
-}
-
-async function upsertProductVariantToSupabase(productId, variant) {
-  if (!supabase) return
-  if (!variant) {
-    const { error } = await supabase.from('product_variants').delete().eq('product_id', Number(productId))
-    logSupabaseWrite('product_variants', 'delete', error)
-    if (error) throw error
-    return
-  }
-  const { error } = await supabase.from('product_variants').upsert({
-    product_id: Number(productId),
-    label: variant.label || null,
-    stock_ids: serialiseVariantStockIds(variant),
-    deduct: Number(variant.deduct ?? 1),
-    needs_mixer: Boolean(variant.needsMixer),
-  }, { onConflict: 'product_id' })
-  logSupabaseWrite('product_variants', 'upsert', error)
-  if (error) throw error
-}
-
-async function deleteProductFromSupabase(productId) {
-  if (!supabase) return
-  const variantDelete = await supabase.from('product_variants').delete().eq('product_id', Number(productId))
-  logSupabaseWrite('product_variants', 'delete', variantDelete.error)
-  if (variantDelete.error) throw variantDelete.error
-  const productDelete = await supabase.from('products').delete().eq('id', Number(productId))
-  logSupabaseWrite('products', 'delete', productDelete.error)
-  if (productDelete.error) throw productDelete.error
 }
 
 async function upsertStockDefinitionToSupabase(item, qty) {
@@ -538,8 +403,6 @@ export default function App() {
   const [categoryState, setCategoryState] = useLocalStorage('bt_categories', { till: [], stock: [] })
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
-  const stockSyncReadyRef = useRef(false)
-
   const setStock = useCallback((update) => {
     setStockRaw(prev => {
       const next = typeof update === 'function' ? update(prev) : update
@@ -626,10 +489,6 @@ export default function App() {
     ;(async () => {
       await seedSupabase()
       if (cancelled) return
-      await loadCategoriesFromSupabase(setCategoryState)
-      if (cancelled) return
-      await loadProductsFromSupabase(setProducts, setProductVariants)
-      if (cancelled) return
       await loadStockFromSupabase(setStockItemsRaw, setStockDefinitions)
       if (cancelled) return
       await loadTillStockFromSupabase(setStockRaw)
@@ -637,7 +496,6 @@ export default function App() {
       await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
       if (cancelled) return
       await loadTransactionsFromSupabase(setTransactions)
-      stockSyncReadyRef.current = true
     })()
     return () => { cancelled = true }
   }, [])
@@ -732,27 +590,6 @@ export default function App() {
       supabase.removeChannel(stockChannel)
     }
   }, [])
-
-  useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return undefined
-
-    const channelName = 'till_realtime_products'
-    const onProductsChange = (payload) => {
-      setProducts(prev => mergeProductsRealtime(prev, payload))
-    }
-
-    const productsChannel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onProductsChange)
-
-    productsChannel.subscribe((status, err) => {
-      console.log('[Realtime] products channel status:', channelName, status, err ?? '')
-    })
-
-    return () => {
-      supabase.removeChannel(productsChannel)
-    }
-  }, [setProducts])
 
   // Migrate legacy staff storage: ["Alice", "Ben"] -> [{ name, pin, role }]
   useEffect(() => {
@@ -1151,10 +988,8 @@ export default function App() {
       return next
     })
     setStock(prev => ({ ...prev, [cleanProduct.id]: prev[cleanProduct.id] ?? cleanProduct.stock ?? 0 }))
-    upsertProductToSupabase(cleanProduct)
-      .then(() => upsertProductVariantToSupabase(cleanProduct.id, variant))
-      .catch(err => console.warn('saveProduct failed:', err?.message || err))
-    showToast('Product saved')
+    console.warn('[Supabase] products table does not exist — product saved locally only')
+    showToast('Product saved (local only)')
   }, [setProducts, setProductVariants, setStock, showToast])
 
   const deleteProduct = useCallback((productId) => {
@@ -1170,9 +1005,8 @@ export default function App() {
       delete next[id]
       return next
     })
-    deleteProductFromSupabase(id)
-      .catch(err => console.warn('deleteProduct failed:', err?.message || err))
-    showToast('Product deleted')
+    console.warn('[Supabase] products table does not exist — product deleted locally only')
+    showToast('Product deleted (local only)')
   }, [setProducts, setProductVariants, setStock, showToast])
 
   const saveStockDefinition = useCallback((item) => {
@@ -1225,10 +1059,9 @@ export default function App() {
     setProductVariants(nextVariants)
     deleteStockDefinitionFromSupabase(stockKey)
       .catch(err => console.warn('deleteStockDefinition failed:', err?.message || err))
-    changedVariants.forEach(([productId, variant]) => {
-      upsertProductVariantToSupabase(productId, variant)
-        .catch(err => console.warn('update variant after stock delete failed:', err?.message || err))
-    })
+    if (changedVariants.length) {
+      console.warn('[Supabase] product_variants table does not exist — variant links updated locally only')
+    }
     showToast('Stock item deleted')
   }, [productVariants, setStockDefinitions, setStockItems, setProductVariants, showToast])
 
@@ -1243,9 +1076,8 @@ export default function App() {
       till: type === 'till' ? uniqueNonEmpty([...(prev?.till || []), name]) : (prev?.till || []),
       stock: type === 'stock' ? uniqueNonEmpty([...(prev?.stock || []), name]) : (prev?.stock || []),
     }))
-    saveCategoryToSupabase(type, name)
-      .catch(err => console.warn('saveCategory failed:', err?.message || err))
-    showToast('Category added')
+    console.warn('[Supabase] categories table does not exist — category saved locally only')
+    showToast('Category added (local only)')
     return name
   }, [setCategoryState, showToast, stockCategories, tillCategories])
 
