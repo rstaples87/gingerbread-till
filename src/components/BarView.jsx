@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../supabase'
+import { logSupabaseWrite } from '../supabaseWriteLog'
 import { fmt, localSessionDateString } from '../utils'
 import { mergeBarOrdersRealtime } from './barViewRealtime'
 import styles from './BarView.module.css'
@@ -102,6 +103,7 @@ export default function BarView({ showToast }) {
       .eq('session_date', sessionDate)
       .eq('status', 'complete')
       .eq('archived', false)
+    logSupabaseWrite('bar_orders', 'update', error)
     if (error) {
       showToast?.('Could not archive orders')
       return

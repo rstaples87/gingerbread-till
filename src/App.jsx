@@ -10,6 +10,7 @@ import {
   STOCK_CATEGORIES as DEFAULT_STOCK_CATEGORIES,
 } from './data'
 import { supabase, isSupabaseConfigured } from './supabase'
+import { logSupabaseWrite } from './supabaseWriteLog'
 import { fmt, getOrderTotal, orderToItems, tabTotal, mixerBottleDeductionForLine } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
@@ -88,13 +89,14 @@ async function seedSupabase() {
   try {
     const { data: staffSample } = await supabase.from('staff').select('id').limit(1)
     if (!staffSample?.length && INITIAL_STAFF.length > 0) {
-      await supabase.from('staff').insert(
+      const staffRes = await supabase.from('staff').insert(
         INITIAL_STAFF.map(s => ({
           name: s.name,
           pin: s.pin ?? '0000',
           role: s.role ?? 'staff',
         })),
       )
+      logSupabaseWrite('staff', 'insert', staffRes.error)
     }
     const { data: stockSample } = await supabase.from('stock_items').select('stock_key').limit(1)
     if (!stockSample?.length) {
@@ -108,10 +110,12 @@ async function seedSupabase() {
         display_unit: s.displayUnit ?? null,
       }))
       const { error: stockSeedError } = await supabase.from('stock_items').insert(seedRows)
+      logSupabaseWrite('stock_items', 'insert', stockSeedError)
       if (stockSeedError) {
-        await supabase.from('stock_items').insert(
+        const fallbackRes = await supabase.from('stock_items').insert(
           INITIAL_STOCK_ITEMS.map(s => ({ stock_key: s.id, qty: s.stock ?? 0 })),
         )
+        logSupabaseWrite('stock_items', 'insert', fallbackRes.error)
       }
     }
   } catch (err) {
@@ -171,6 +175,7 @@ async function saveCategoryToSupabase(type, name) {
     name,
     type,
   })
+  logSupabaseWrite('categories', 'insert', error)
   if (error) throw error
 }
 
@@ -181,12 +186,12 @@ function upsertStockItemRowToSupabase(stockKey, qty) {
   supabase
     .from('stock_items')
     .upsert(row, { onConflict: 'stock_key' })
-    .then(({ data, error }) => {
-      console.log('[stock_items] upsert', stockKey, qty, error ?? 'ok', { data })
+    .then(({ error }) => {
+      logSupabaseWrite('stock_items', 'upsert', error)
       if (error) maybeQueueSyncFailure('stock', row, error)
     })
     .catch(err => {
-      console.log('[stock_items] upsert catch', stockKey, qty, err)
+      logSupabaseWrite('stock_items', 'upsert', err)
       maybeQueueSyncFailure('stock', row, err)
     })
 }
@@ -238,12 +243,12 @@ function upsertTillStockRowToSupabase(productId, qty) {
   supabase
     .from('till_stock')
     .upsert(row, { onConflict: 'product_id' })
-    .then(({ data, error }) => {
-      console.log('[till_stock] upsert', row.product_id, row.qty, error ?? 'ok', { data })
+    .then(({ error }) => {
+      logSupabaseWrite('till_stock', 'upsert', error)
       if (error) maybeQueueSyncFailure('till_stock', row, error)
     })
     .catch(err => {
-      console.log('[till_stock] upsert catch', { row, err })
+      logSupabaseWrite('till_stock', 'upsert', err)
       maybeQueueSyncFailure('till_stock', row, err)
     })
 }
@@ -293,6 +298,7 @@ async function upsertProductToSupabase(product) {
     price: Number(product.price),
     category: product.category,
   }, { onConflict: 'id' })
+  logSupabaseWrite('products', 'upsert', error)
   if (error) throw error
 }
 
@@ -300,6 +306,7 @@ async function upsertProductVariantToSupabase(productId, variant) {
   if (!supabase) return
   if (!variant) {
     const { error } = await supabase.from('product_variants').delete().eq('product_id', Number(productId))
+    logSupabaseWrite('product_variants', 'delete', error)
     if (error) throw error
     return
   }
@@ -310,14 +317,17 @@ async function upsertProductVariantToSupabase(productId, variant) {
     deduct: Number(variant.deduct ?? 1),
     needs_mixer: Boolean(variant.needsMixer),
   }, { onConflict: 'product_id' })
+  logSupabaseWrite('product_variants', 'upsert', error)
   if (error) throw error
 }
 
 async function deleteProductFromSupabase(productId) {
   if (!supabase) return
   const variantDelete = await supabase.from('product_variants').delete().eq('product_id', Number(productId))
+  logSupabaseWrite('product_variants', 'delete', variantDelete.error)
   if (variantDelete.error) throw variantDelete.error
   const productDelete = await supabase.from('products').delete().eq('id', Number(productId))
+  logSupabaseWrite('products', 'delete', productDelete.error)
   if (productDelete.error) throw productDelete.error
 }
 
@@ -332,12 +342,14 @@ async function upsertStockDefinitionToSupabase(item, qty) {
     bottle_yield: item.bottleYield == null ? null : Number(item.bottleYield),
     display_unit: item.displayUnit || null,
   }, { onConflict: 'stock_key' })
+  logSupabaseWrite('stock_items', 'upsert', error)
   if (error) throw error
 }
 
 async function deleteStockDefinitionFromSupabase(stockKey) {
   if (!supabase) return
   const { error } = await supabase.from('stock_items').delete().eq('stock_key', stockKey)
+  logSupabaseWrite('stock_items', 'delete', error)
   if (error) throw error
 }
 
@@ -372,9 +384,13 @@ function syncTransactionToSupabase(tx) {
     .from('transactions')
     .upsert(row, { onConflict: 'id' })
     .then(({ error }) => {
+      logSupabaseWrite('transactions', 'upsert', error)
       if (error) maybeQueueSyncFailure('transaction', row, error)
     })
-    .catch(err => maybeQueueSyncFailure('transaction', row, err))
+    .catch(err => {
+      logSupabaseWrite('transactions', 'upsert', err)
+      maybeQueueSyncFailure('transaction', row, err)
+    })
 }
 
 /** Columns on public.tabs we may write: id, name, items, opened_at, tab_limit, settled (not staff until schema cache includes it). */
@@ -395,22 +411,9 @@ function tabRowForSupabase(tab) {
   return row
 }
 
-/** New tab row — explicit insert so creation always hits PostgREST INSERT. */
+/** New tab — upsert so create is idempotent if the row already exists. */
 function insertTabToSupabase(tab) {
-  console.log('[tabs] insertTabToSupabase called, supabase:', supabase ? 'defined' : 'NULL')
-  if (!supabase || !tab?.id) return
-  const row = tabRowForSupabase(tab)
-  supabase
-    .from('tabs')
-    .insert(row)
-    .then(({ data, error }) => {
-      console.log('[tabs] insert response', { row, data, error })
-      if (error) maybeQueueSyncFailure('tabs', row, error)
-    })
-    .catch(err => {
-      console.log('[tabs] insert catch', { row, err })
-      maybeQueueSyncFailure('tabs', row, err)
-    })
+  syncTabToSupabase(tab)
 }
 
 function syncTabToSupabase(tab) {
@@ -419,12 +422,12 @@ function syncTabToSupabase(tab) {
   supabase
     .from('tabs')
     .upsert(row, { onConflict: 'id' })
-    .then(({ data, error }) => {
-      console.log('[tabs] upsert response', { row, data, error })
+    .then(({ error }) => {
+      logSupabaseWrite('tabs', 'upsert', error)
       if (error) maybeQueueSyncFailure('tabs', row, error)
     })
     .catch(err => {
-      console.log('[tabs] upsert catch', { row, err })
+      logSupabaseWrite('tabs', 'upsert', err)
       maybeQueueSyncFailure('tabs', row, err)
     })
 }
@@ -435,12 +438,12 @@ function deleteTabFromSupabase(tabId) {
     .from('tabs')
     .delete()
     .eq('id', tabId)
-    .then(({ data, error }) => {
-      console.log('[tabs] delete response', { tabId, data, error })
+    .then(({ error }) => {
+      logSupabaseWrite('tabs', 'delete', error)
       if (error) maybeQueueSyncFailure('tabs_delete', { id: tabId }, error)
     })
     .catch(err => {
-      console.log('[tabs] delete catch', { tabId, err })
+      logSupabaseWrite('tabs', 'delete', err)
       maybeQueueSyncFailure('tabs_delete', { id: tabId }, err)
     })
 }
@@ -540,7 +543,7 @@ export default function App() {
   const setStock = useCallback((update) => {
     setStockRaw(prev => {
       const next = typeof update === 'function' ? update(prev) : update
-      if (stockSyncReadyRef.current) {
+      if (supabase) {
         const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})])
         for (const id of keys) {
           if (Number(prev?.[id] ?? 0) !== Number(next?.[id] ?? 0)) {
@@ -555,7 +558,14 @@ export default function App() {
   const setStockItems = useCallback((update) => {
     setStockItemsRaw(prev => {
       const next = typeof update === 'function' ? update(prev) : update
-      if (stockSyncReadyRef.current) syncStockToSupabase(next)
+      if (supabase) {
+        const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})])
+        for (const id of keys) {
+          if (Number(prev?.[id] ?? 0) !== Number(next?.[id] ?? 0)) {
+            upsertStockItemRowToSupabase(id, next[id] ?? 0)
+          }
+        }
+      }
       return next
     })
   }, [])
@@ -609,6 +619,9 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      console.warn('[Supabase write] disabled — VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY missing at build time')
+    }
     let cancelled = false
     ;(async () => {
       await seedSupabase()
@@ -878,7 +891,6 @@ export default function App() {
     const newTab = { id, name, items: [], openedAt: new Date(), staff: activeSaleStaff }
     setOpenTabs(prev => [...prev, newTab])
     setOrders(prev => ({ ...prev, [id]: {} }))
-    console.log('[tabs] openNewTabEntry calling insertTabToSupabase for', newTab.id)
     insertTabToSupabase(newTab)
     switchOrder(id)
     showToast('Tab opened: ' + name)
@@ -941,7 +953,7 @@ export default function App() {
         updatedTab = { ...tab, items: newItems }
         return updatedTab
       })
-      if (updatedTab) queueMicrotask(() => syncTabToSupabase(updatedTab))
+      if (updatedTab) syncTabToSupabase(updatedTab)
       return next
     })
     clearOrder(tabId)
@@ -1056,7 +1068,7 @@ export default function App() {
         voided = { ...tx, voided: true, voidedAt: new Date() }
         return voided
       })
-      if (voided) queueMicrotask(() => syncTransactionToSupabase(voided))
+      if (voided) syncTransactionToSupabase(voided)
       return next
     })
     showToast('Transaction voided — stock restored')
@@ -1111,7 +1123,7 @@ export default function App() {
     setOpenTabs(prev => {
       const next = prev.map(t => (t.id === tabId ? { ...t, limit: n } : t))
       const row = next.find(t => t.id === tabId)
-      if (row) queueMicrotask(() => syncTabToSupabase(row))
+      if (row) syncTabToSupabase(row)
       return next
     })
     showToast(`Tab limit updated to ${fmt(n)}`)

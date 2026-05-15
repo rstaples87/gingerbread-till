@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { logSupabaseWrite } from './supabaseWriteLog'
 
 export const SYNC_QUEUE_KEY = 'bt_sync_queue'
 
@@ -56,18 +57,22 @@ export async function flushSyncQueue() {
       let res
       if (item.type === 'transaction') {
         res = await supabase.from('transactions').upsert(item.payload, { onConflict: 'id' })
+        logSupabaseWrite('transactions', 'upsert', res?.error)
       } else if (item.type === 'stock') {
         res = await supabase.from('stock_items').upsert(item.payload, { onConflict: 'stock_key' })
+        logSupabaseWrite('stock_items', 'upsert', res?.error)
       } else if (item.type === 'till_stock') {
         res = await supabase.from('till_stock').upsert(item.payload, { onConflict: 'product_id' })
+        logSupabaseWrite('till_stock', 'upsert', res?.error)
       } else if (item.type === 'bar_order') {
         res = await supabase.from('bar_orders').insert(item.payload)
+        logSupabaseWrite('bar_orders', 'insert', res?.error)
       } else if (item.type === 'tabs') {
         res = await supabase.from('tabs').upsert(item.payload, { onConflict: 'id' })
-        console.log('[tabs] flush upsert response', { payload: item.payload, data: res?.data, error: res?.error })
+        logSupabaseWrite('tabs', 'upsert', res?.error)
       } else if (item.type === 'tabs_delete') {
         res = await supabase.from('tabs').delete().eq('id', item.payload.id)
-        console.log('[tabs] flush delete response', { payload: item.payload, data: res?.data, error: res?.error })
+        logSupabaseWrite('tabs', 'delete', res?.error)
       } else {
         remaining.push(item)
         continue

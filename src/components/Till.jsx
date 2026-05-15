@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
 import { fmt, getOrderTotal, orderToItems, mixerServesPerDrink, tabTotal, localSessionDateString } from '../utils'
 import { supabase } from '../supabase'
+import { logSupabaseWrite } from '../supabaseWriteLog'
 import styles from './Till.module.css'
 
 function getPortionLabel(product) {
@@ -451,6 +452,7 @@ export default function Till({
     }
     try {
       const { error } = await supabase.from('bar_orders').insert(payload)
+      logSupabaseWrite('bar_orders', 'insert', error)
       if (error) throw error
       return true
     } catch (e) {
