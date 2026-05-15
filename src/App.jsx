@@ -174,20 +174,29 @@ async function saveCategoryToSupabase(type, name) {
   if (error) throw error
 }
 
+/** Single warehouse stock_items row (Stock take tab). */
+function upsertStockItemRowToSupabase(stockKey, qty) {
+  if (!supabase) return
+  const row = { stock_key: stockKey, qty: Number(qty) }
+  supabase
+    .from('stock_items')
+    .upsert(row, { onConflict: 'stock_key' })
+    .then(({ data, error }) => {
+      console.log('[stock_items] upsert', stockKey, qty, error ?? 'ok', { data })
+      if (error) maybeQueueSyncFailure('stock', row, error)
+    })
+    .catch(err => {
+      console.log('[stock_items] upsert catch', stockKey, qty, err)
+      maybeQueueSyncFailure('stock', row, err)
+    })
+}
+
 /** Upsert warehouse stock map — fire-and-forget */
 function syncStockToSupabase(map) {
   if (!supabase || !map) return
-  const rows = Object.entries(map).map(([stock_key, qty]) => ({
-    stock_key,
-    qty: Number(qty),
-  }))
-  supabase
-    .from('stock_items')
-    .upsert(rows, { onConflict: 'stock_key' })
-    .then(({ error }) => {
-      if (error) maybeQueueSyncFailure('stock', rows, error)
-    })
-    .catch(err => maybeQueueSyncFailure('stock', rows, err))
+  for (const [stock_key, qty] of Object.entries(map)) {
+    upsertStockItemRowToSupabase(stock_key, qty)
+  }
 }
 
 async function loadStockFromSupabase(setStockItemsRaw, setStockDefinitions) {
@@ -230,7 +239,7 @@ function upsertTillStockRowToSupabase(productId, qty) {
     .from('till_stock')
     .upsert(row, { onConflict: 'product_id' })
     .then(({ data, error }) => {
-      console.log('[till_stock] upsert response', { row, data, error })
+      console.log('[till_stock] upsert', row.product_id, row.qty, error ?? 'ok', { data })
       if (error) maybeQueueSyncFailure('till_stock', row, error)
     })
     .catch(err => {
@@ -814,17 +823,37 @@ export default function App() {
     return () => window.removeEventListener('online', onOnline)
   }, [showToast])
 
-  const updateStock = useCallback((id, delta) => {
-    setStock(s => {
-      const newQty = Math.max(0, (s[id] ?? 0) + delta)
-      return { ...s, [id]: newQty }
+  /** Stock view ± — till products (till_stock). Upserts immediately when supabase is configured. */
+  const updateStock = useCallback((productId, delta) => {
+    setStockRaw(prev => {
+      const newQty = Math.max(0, (prev[productId] ?? 0) + delta)
+      if (supabase) {
+        upsertTillStockRowToSupabase(productId, newQty)
+      }
+      return { ...prev, [productId]: newQty }
     })
-  }, [setStock])
+  }, [])
 
-  const setStockValue = useCallback((id, val) => {
+  const setStockValue = useCallback((productId, val) => {
     const newQty = Math.max(0, val)
-    setStock(s => ({ ...s, [id]: newQty }))
-  }, [setStock])
+    setStockRaw(prev => {
+      if (supabase) {
+        upsertTillStockRowToSupabase(productId, newQty)
+      }
+      return { ...prev, [productId]: newQty }
+    })
+  }, [])
+
+  /** Stock view ± — stock take tab (stock_items warehouse table). */
+  const changeStockItem = useCallback((stockKey, delta) => {
+    setStockItemsRaw(prev => {
+      const newQty = Math.max(0, (prev[stockKey] ?? 0) + delta)
+      if (supabase) {
+        upsertStockItemRowToSupabase(stockKey, newQty)
+      }
+      return { ...prev, [stockKey]: newQty }
+    })
+  }, [])
 
   const addTransaction = useCallback((tx) => {
     setTransactions(prev => [tx, ...prev])
@@ -1228,7 +1257,7 @@ export default function App() {
   const sharedProps = {
     products, setProducts,
     productVariants, setProductVariants,
-    stock, updateStock, setStockValue,
+    stock, updateStock, setStockValue, changeStockItem,
     stockItems, setStockItems,
     stockDefinitions, setStockDefinitions,
     tillCategories,

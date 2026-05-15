@@ -13,12 +13,8 @@ function getPortionLabel(product) {
   return product.portionSize >= 100 ? 'glasses' : 'measures'
 }
 
-export default function Stock({ products, stock, updateStock, stockItems, setStockItems, stockDefinitions, stockCategories }) {
+export default function Stock({ products, stock, updateStock, changeStockItem, stockItems, stockDefinitions, stockCategories }) {
   const [tab, setTab] = useState('till')
-
-  const changeStockItem = (id, delta) => {
-    setStockItems(prev => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) + delta) }))
-  }
 
   return (
     <div className={styles.wrap}>
