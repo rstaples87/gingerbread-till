@@ -28,6 +28,10 @@ import {
   normaliseTabRowLive,
   normaliseTransactionRowLive,
 } from './supabaseRealtimeMerge'
+import {
+  loadTillStockFromSupabase,
+  upsertTillStockRowToSupabase,
+} from './tillStockSupabase'
 
 function normaliseStockDefinitionRow(row, fallback) {
   return {
@@ -294,56 +298,8 @@ async function loadStockFromSupabase(setStockItemsRaw, setStockDefinitions) {
   return count
 }
 
-/** Single till menu product row — used on every stock change and sale deduction. */
-function upsertTillStockRowToSupabase(productId, qty) {
-  if (!supabase) return
-  const row = { product_id: Number(productId), qty: Number(qty) }
-  supabase
-    .from('till_stock')
-    .upsert(row, { onConflict: 'product_id' })
-    .then(({ error }) => {
-      logSupabaseWrite('till_stock', 'upsert', error)
-      if (error) maybeQueueSyncFailure('till_stock', row, error)
-    })
-    .catch(err => {
-      logSupabaseWrite('till_stock', 'upsert', err)
-      maybeQueueSyncFailure('till_stock', row, err)
-    })
-}
-
-/** Bulk till_stock sync (e.g. offline queue flush). */
-function syncTillStockToSupabase(map) {
-  if (!supabase || !map) return
-  for (const [product_id, qty] of Object.entries(map)) {
-    upsertTillStockRowToSupabase(product_id, qty)
-  }
-}
-
-async function loadTillStockFromSupabase(setStockRaw, options = {}) {
-  if (!supabase) return 0
-  const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
-  let lastData = null
-  try {
-    for (let i = 0; i < retryDelaysMs.length; i++) {
-      const wait = retryDelaysMs[i]
-      if (wait > 0) await new Promise(r => setTimeout(r, wait))
-      const { data, error } = await supabase.from('till_stock').select('product_id, qty')
-      if (error) throw error
-      lastData = data
-      if (data?.length) break
-    }
-    const rows = lastData ?? []
-    const next = {}
-    for (const row of rows) {
-      next[row.product_id] = Number(row.qty)
-    }
-    setStockRaw(next)
-    return rows.length
-  } catch (err) {
-    console.warn('loadTillStockFromSupabase failed:', err?.message || err)
-    return 0
-  }
-}
+const onTillStockUpsertQueueable = (row, err) =>
+  maybeQueueSyncFailure('till_stock', row, err)
 
 async function upsertStockDefinitionToSupabase(item, qty) {
   if (!supabase) return
@@ -558,7 +514,7 @@ export default function App() {
         const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})])
         for (const id of keys) {
           if (Number(prev?.[id] ?? 0) !== Number(next?.[id] ?? 0)) {
-            upsertTillStockRowToSupabase(id, next[id] ?? 0)
+            upsertTillStockRowToSupabase(id, next[id] ?? 0, onTillStockUpsertQueueable)
           }
         }
       }
@@ -852,7 +808,7 @@ export default function App() {
     setStockRaw(prev => {
       const newQty = Math.max(0, (prev[productId] ?? 0) + delta)
       if (supabase) {
-        upsertTillStockRowToSupabase(productId, newQty)
+        upsertTillStockRowToSupabase(productId, newQty, onTillStockUpsertQueueable)
       }
       return { ...prev, [productId]: newQty }
     })
@@ -861,7 +817,7 @@ export default function App() {
   const setStockValue = useCallback((productId, val) => {
     const newQty = Math.max(0, val)
     if (supabase) {
-      upsertTillStockRowToSupabase(productId, newQty)
+      upsertTillStockRowToSupabase(productId, newQty, onTillStockUpsertQueueable)
     }
     setStockRaw(prev => ({ ...prev, [productId]: newQty }))
   }, [])

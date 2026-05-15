@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { logSupabaseWrite } from './supabaseWriteLog'
+import { upsertTillStockFromQueuePayload } from './tillStockSupabase'
 
 export const SYNC_QUEUE_KEY = 'bt_sync_queue'
 
@@ -62,7 +63,7 @@ export async function flushSyncQueue() {
         res = await supabase.from('stock_items').upsert(item.payload, { onConflict: 'stock_key' })
         logSupabaseWrite('stock_items', 'upsert', res?.error)
       } else if (item.type === 'till_stock') {
-        res = await supabase.from('till_stock').upsert(item.payload, { onConflict: 'product_id' })
+        res = await upsertTillStockFromQueuePayload(item.payload)
         logSupabaseWrite('till_stock', 'upsert', res?.error)
       } else if (item.type === 'bar_order') {
         res = await supabase.from('bar_orders').insert(item.payload)

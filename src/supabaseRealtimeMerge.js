@@ -95,7 +95,7 @@ export function mergeTillStockMapRealtime(prev, payload) {
     return next
   }
 
-  const qty = Number(newRow?.qty ?? 0)
+  const qty = Number(newRow?.qty ?? newRow?.quantity ?? 0)
   return { ...prev, [pid]: qty }
 }
 
