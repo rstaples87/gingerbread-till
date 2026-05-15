@@ -17,7 +17,6 @@ function timeLabel(d) {
 
 export default function StaffLog({
   staff,
-  setStaff,
   currentlyIn,
   setCurrentlyIn,
   attendanceLog,
@@ -25,6 +24,9 @@ export default function StaffLog({
   clockOutStaff,
   saveShiftLogForToday,
   currentStaff,
+  addStaffMember,
+  updateStaffPin,
+  removeStaffMember,
 }) {
   const [selectedStaff, setSelectedStaff] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
@@ -34,9 +36,13 @@ export default function StaffLog({
 
   const staffList = useMemo(
     () => (staff || [])
-      .map(s => (typeof s === 'string' ? { name: s, pin: '0000', role: 'staff' } : s))
+      .map(s =>
+        typeof s === 'string'
+          ? { id: undefined, name: s, pin: '0000', role: 'staff', active: true }
+          : s,
+      )
       .filter(s => s && s.name),
-    [staff]
+    [staff],
   )
   const staffNames = useMemo(() => staffList.map(s => s.name), [staffList])
   const isManager = currentStaff === 'Manager'
@@ -67,7 +73,7 @@ export default function StaffLog({
     if (!n) return setMsg('Enter a name')
     if (p.length !== 4) return setMsg('PIN must be 4 digits')
     if (staffNames.some(name => name.toLowerCase() === n.toLowerCase())) return setMsg('Name already exists')
-    setStaff(prev => [...(Array.isArray(prev) ? prev : []), { name: n, pin: p, role: 'staff' }])
+    addStaffMember(n, p)
     setNewName('')
     setNewPin('')
     setMsg('Staff member added')
@@ -76,13 +82,12 @@ export default function StaffLog({
   const savePin = (name) => {
     const p = onlyDigits4(pinEdits[name] || '')
     if (p.length !== 4) return setMsg('PIN must be 4 digits')
-    setStaff(prev => (Array.isArray(prev) ? prev : []).map(s => (s?.name === name ? { ...s, pin: p } : s)))
+    updateStaffPin(name, p)
     setMsg('PIN updated')
   }
 
   const removeStaff = (name) => {
-    setStaff(prev => (Array.isArray(prev) ? prev : []).filter(s => s?.name !== name))
-    setCurrentlyIn(prev => (Array.isArray(prev) ? prev : []).filter(row => row.staffName !== name))
+    removeStaffMember(name)
     setMsg('Staff member removed')
   }
 
@@ -128,7 +133,7 @@ export default function StaffLog({
                 <div className={styles.sectionLabel}>Existing staff</div>
                 <div className={styles.staffEditorList}>
                   {staffList.map(s => (
-                    <div className={styles.staffEditRow} key={s.name}>
+                    <div className={styles.staffEditRow} key={s.id || s.name}>
                       <div className={styles.staffEditName}>{s.name}</div>
                       <input
                         className={styles.input}

@@ -46,6 +46,49 @@ function uniqueNonEmpty(items) {
   return Array.from(new Set(items.map(item => String(item || '').trim()).filter(Boolean)))
 }
 
+function logStaffWrite(operation, error) {
+  if (error) {
+    logSupabaseWrite('staff', operation, error)
+    return
+  }
+  console.log(`[Supabase write] staff ${operation} ok`)
+}
+
+function newStaffUuid() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `staff_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+}
+
+function normaliseStaffRow(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    pin: String(row.pin ?? '0000'),
+    role: row.role ?? 'staff',
+    active: row.active !== false,
+  }
+}
+
+async function loadStaffFromSupabase(setStaff) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase
+      .from('staff')
+      .select('id, name, pin, role, active')
+      .order('name', { ascending: true })
+    if (error) throw error
+    const rows = (data || [])
+      .filter(r => r.active !== false)
+      .map(normaliseStaffRow)
+      .filter(Boolean)
+    setStaff(rows)
+  } catch (err) {
+    console.warn('loadStaffFromSupabase failed:', err?.message || err)
+  }
+}
+
 function localDayBounds(d = new Date()) {
   const start = new Date(d.getFullYear(), d.getMonth(), d.getDate())
   const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
@@ -136,9 +179,10 @@ async function seedSupabase() {
           name: s.name,
           pin: s.pin ?? '0000',
           role: s.role ?? 'staff',
+          active: true,
         })),
       )
-      logSupabaseWrite('staff', 'insert', staffRes.error)
+      logStaffWrite('insert', staffRes.error)
     }
     const { data: stockSample } = await supabase.from('stock_items').select('stock_key').limit(1)
     if (!stockSample?.length) {
@@ -539,6 +583,8 @@ export default function App() {
   tillStockSetterRef.current = setStockRaw
   const stockItemsSetterRef = useRef(setStockItemsRaw)
   stockItemsSetterRef.current = setStockItemsRaw
+  const staffSetterRef = useRef(setStaff)
+  staffSetterRef.current = setStaff
   const attendanceLoadersRef = useRef({ setAttendanceLog, setCurrentlyIn })
   attendanceLoadersRef.current = { setAttendanceLog, setCurrentlyIn }
   const mixerStockIds = stockDefinitions.filter(item => item.category === 'Mixers').map(item => item.id)
@@ -584,6 +630,8 @@ export default function App() {
     ;(async () => {
       await seedSupabase()
       if (cancelled) return
+      if (supabase) await loadStaffFromSupabase(setStaff)
+      if (cancelled) return
       await loadStockFromSupabase(setStockItemsRaw, setStockDefinitions)
       if (cancelled) return
       await loadTillStockFromSupabase(setStockRaw)
@@ -621,6 +669,10 @@ export default function App() {
       await loadStockItemsFromSupabase(stockItemsSetterRef.current, { retryOnEmpty: true })
     }
 
+    const onStaffChange = async () => {
+      await loadStaffFromSupabase(staffSetterRef.current)
+    }
+
     const subscribeTable = (channelName, table, handler) => {
       const channel = supabase
         .channel(channelName)
@@ -643,11 +695,13 @@ export default function App() {
     const txChannelName = 'till_realtime_transactions'
     const tillStockChannelName = 'till_realtime_stock'
     const stockItemsChannelName = 'till_realtime_stock_items'
+    const staffChannelName = 'till_realtime_staff'
 
     subscribeTable(tabsChannelName, 'tabs', onTabsChange)
     subscribeTable(txChannelName, 'transactions', onTransactionsChange)
     subscribeTable(tillStockChannelName, 'till_stock', onTillStockChange)
     subscribeTable(stockItemsChannelName, 'stock_items', onStockItemsChange)
+    subscribeTable(staffChannelName, 'staff', onStaffChange)
 
     const onAttendanceChange = async () => {
       const { setAttendanceLog: setLog, setCurrentlyIn: setIn } = attendanceLoadersRef.current
@@ -686,7 +740,13 @@ export default function App() {
   useEffect(() => {
     if (!Array.isArray(staff) || staff.length === 0) return
     if (typeof staff[0] !== 'string') return
-    setStaff(staff.map(s => ({ name: s, pin: '0000', role: 'staff' })))
+    setStaff(staff.map(s => ({
+      id: newStaffUuid(),
+      name: s,
+      pin: '0000',
+      role: 'staff',
+      active: true,
+    })))
   }, [staff, setStaff])
 
   // One-time reset for legacy product sets when menu has changed.
@@ -1170,6 +1230,61 @@ export default function App() {
     return name
   }, [setCategoryState, showToast, stockCategories, tillCategories])
 
+  const addStaffMember = useCallback((name, pin) => {
+    const cleanName = String(name || '').trim()
+    const cleanPin = String(pin || '').replace(/\D/g, '').slice(0, 4)
+    if (!cleanName || cleanPin.length !== 4) return
+    const id = newStaffUuid()
+    const role = 'staff'
+    const row = { id, name: cleanName, pin: cleanPin, role, active: true }
+    setStaff(prev => [...(Array.isArray(prev) ? prev : []), row])
+    if (supabase) {
+      supabase
+        .from('staff')
+        .insert({ id, name: cleanName, pin: cleanPin, role, active: true })
+        .then(({ error }) => logStaffWrite('insert', error))
+        .catch(err => logStaffWrite('insert', err))
+    }
+  }, [setStaff])
+
+  const updateStaffPin = useCallback((name, pin) => {
+    const cleanPin = String(pin || '').replace(/\D/g, '').slice(0, 4)
+    if (cleanPin.length !== 4) return
+    let rowId = null
+    setStaff(prev =>
+      (Array.isArray(prev) ? prev : []).map(s => {
+        if (s?.name === name) {
+          rowId = s.id
+          return { ...s, pin: cleanPin }
+        }
+        return s
+      }),
+    )
+    if (supabase) {
+      const q = rowId
+        ? supabase.from('staff').update({ pin: cleanPin }).eq('id', rowId)
+        : supabase.from('staff').update({ pin: cleanPin }).eq('name', name)
+      q.then(({ error }) => logStaffWrite('update', error)).catch(err => logStaffWrite('update', err))
+    }
+  }, [setStaff])
+
+  const removeStaffMember = useCallback((name) => {
+    let victimId = null
+    setStaff(prev => {
+      const arr = Array.isArray(prev) ? prev : []
+      const v = arr.find(s => s?.name === name)
+      victimId = v?.id ?? null
+      return arr.filter(s => s?.name !== name)
+    })
+    setCurrentlyIn(prev => (Array.isArray(prev) ? prev : []).filter(row => row.staffName !== name))
+    if (supabase) {
+      const q = victimId
+        ? supabase.from('staff').delete().eq('id', victimId)
+        : supabase.from('staff').delete().eq('name', name)
+      q.then(({ error }) => logStaffWrite('delete', error)).catch(err => logStaffWrite('delete', err))
+    }
+  }, [setStaff, setCurrentlyIn])
+
   const clockInStaff = useCallback((staffName) => {
     if (!staffName) return
     const id =
@@ -1251,6 +1366,7 @@ export default function App() {
     stockCategories,
     mixerStockIds,
     staff, setStaff,
+    addStaffMember, updateStaffPin, removeStaffMember,
     currentStaff, setCurrentStaff,
     attendanceLog: hydratedAttendanceLog, setAttendanceLog,
     currentlyIn: hydratedCurrentlyIn, setCurrentlyIn,
