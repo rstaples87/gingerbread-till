@@ -350,18 +350,22 @@ function syncTransactionToSupabase(tx) {
     .catch(err => maybeQueueSyncFailure('transaction', row, err))
 }
 
+/** Columns on public.tabs we may write: id, name, items, opened_at, tab_limit, settled (not staff until schema cache includes it). */
 function tabRowForSupabase(tab) {
   const openedAt =
     tab.openedAt instanceof Date ? tab.openedAt.toISOString()
       : tab.openedAt ?? new Date().toISOString()
-  return {
+  const row = {
     id: tab.id,
     name: tab.name ?? '',
     items: tab.items ?? [],
     opened_at: openedAt,
-    staff: tab.staff ?? null,
-    tab_limit: tab.limit != null && tab.limit !== '' ? Number(tab.limit) : null,
+    settled: false,
   }
+  if (tab.limit != null && tab.limit !== '') {
+    row.tab_limit = Number(tab.limit)
+  }
+  return row
 }
 
 /** New tab row — explicit insert so creation always hits PostgREST INSERT. */
