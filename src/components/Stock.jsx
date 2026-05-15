@@ -13,7 +13,7 @@ function getPortionLabel(product) {
   return product.portionSize >= 100 ? 'glasses' : 'measures'
 }
 
-export default function Stock({ products, stock, updateStock, changeStockItem, stockItems, stockDefinitions, stockCategories }) {
+export default function Stock({ products, stock, adjustTillStock, adjustStockItem, stockItems, stockDefinitions, stockCategories }) {
   const [tab, setTab] = useState('till')
 
   return (
@@ -51,9 +51,9 @@ export default function Stock({ products, stock, updateStock, changeStockItem, s
                 </div>
               </div>
               <div className={styles.controls}>
-                <button className={styles.qtyBtn} onClick={() => updateStock(p.id, -1)}>−</button>
+                <button className={styles.qtyBtn} onClick={() => adjustTillStock(p.id, -1)}>−</button>
                 <span className={styles.qty}>{p.bottleYield ? `${formatBottles(s)} bottles` : s}</span>
-                <button className={styles.qtyBtn} onClick={() => updateStock(p.id, 1)}>+</button>
+                <button className={styles.qtyBtn} onClick={() => adjustTillStock(p.id, 1)}>+</button>
               </div>
             </div>
           )
@@ -86,9 +86,9 @@ export default function Stock({ products, stock, updateStock, changeStockItem, s
                       </div>
                     </div>
                     <div className={styles.controls}>
-                      <button className={styles.qtyBtn} onClick={() => changeStockItem(item.id, -1)}>−</button>
+                      <button className={styles.qtyBtn} onClick={() => adjustStockItem(item.id, -1)}>−</button>
                       <span className={styles.qty}>{item.bottleYield ? formatBottles(qty) : qty}</span>
-                      <button className={styles.qtyBtn} onClick={() => changeStockItem(item.id, 1)}>+</button>
+                      <button className={styles.qtyBtn} onClick={() => adjustStockItem(item.id, 1)}>+</button>
                     </div>
                   </div>
                 )

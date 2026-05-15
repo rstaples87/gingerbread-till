@@ -609,14 +609,14 @@ export default function App() {
       localStorage.removeItem('bt_stock_items')
     } catch {}
     setProducts(INITIAL_PRODUCTS)
-    setStock(Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
+    setStockRaw(Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
     setProductVariants(INITIAL_PRODUCT_VARIANTS)
     setStockDefinitions(INITIAL_STOCK_ITEMS)
-    setStockItems(Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
-  }, [products, setProducts, setProductVariants, setStock, setStockDefinitions, setStockItems])
+    setStockItemsRaw(Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
+  }, [products, setProducts, setProductVariants, setStockRaw, setStockDefinitions, setStockItemsRaw])
 
   useEffect(() => {
-    setStockItems(prev => {
+    setStockItemsRaw(prev => {
       let changed = false
       const next = { ...prev }
       for (const item of stockDefinitions) {
@@ -627,10 +627,10 @@ export default function App() {
       }
       return changed ? next : prev
     })
-  }, [stockDefinitions, setStockItems])
+  }, [stockDefinitions, setStockItemsRaw])
 
   useEffect(() => {
-    setStock(prev => {
+    setStockRaw(prev => {
       let changed = false
       const next = { ...prev }
       for (const product of products) {
@@ -641,7 +641,7 @@ export default function App() {
       }
       return changed ? next : prev
     })
-  }, [products, setStock])
+  }, [products, setStockRaw])
 
   useEffect(() => {
     if (currentStaff === 'Manager' || !currentStaff) return
@@ -673,8 +673,8 @@ export default function App() {
     return () => window.removeEventListener('online', onOnline)
   }, [showToast])
 
-  /** Stock view ± — till products (till_stock). Upserts immediately when supabase is configured. */
-  const updateStock = useCallback((productId, delta) => {
+  /** Stock view “Till products” ± — writes till_stock only (product_id, qty). */
+  const adjustTillStock = useCallback((productId, delta) => {
     setStockRaw(prev => {
       const newQty = Math.max(0, (prev[productId] ?? 0) + delta)
       if (supabase) {
@@ -686,16 +686,14 @@ export default function App() {
 
   const setStockValue = useCallback((productId, val) => {
     const newQty = Math.max(0, val)
-    setStockRaw(prev => {
-      if (supabase) {
-        upsertTillStockRowToSupabase(productId, newQty)
-      }
-      return { ...prev, [productId]: newQty }
-    })
+    if (supabase) {
+      upsertTillStockRowToSupabase(productId, newQty)
+    }
+    setStockRaw(prev => ({ ...prev, [productId]: newQty }))
   }, [])
 
-  /** Stock view ± — stock take tab (stock_items warehouse table). */
-  const changeStockItem = useCallback((stockKey, delta) => {
+  /** Stock view “Stock take” ± — writes stock_items only (stock_key, qty). */
+  const adjustStockItem = useCallback((stockKey, delta) => {
     setStockItemsRaw(prev => {
       const newQty = Math.max(0, (prev[stockKey] ?? 0) + delta)
       if (supabase) {
@@ -1101,7 +1099,7 @@ export default function App() {
   const sharedProps = {
     products, setProducts,
     productVariants, setProductVariants,
-    stock, updateStock, setStockValue, changeStockItem,
+    stock, adjustTillStock, setStockValue, adjustStockItem,
     stockItems, setStockItems,
     stockDefinitions, setStockDefinitions,
     tillCategories,
