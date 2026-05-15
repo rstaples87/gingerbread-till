@@ -74,10 +74,18 @@ function normaliseStaffRow(row) {
 async function loadStaffFromSupabase(setStaff) {
   if (!supabase) return
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('staff')
       .select('id, name, pin, role, active')
       .order('name', { ascending: true })
+    if (error) {
+      const fb = await supabase
+        .from('staff')
+        .select('id, name, pin, role')
+        .order('name', { ascending: true })
+      data = fb.data
+      error = fb.error
+    }
     if (error) throw error
     const rows = (data || [])
       .filter(r => r.active !== false)
@@ -174,7 +182,7 @@ async function seedSupabase() {
   try {
     const { data: staffSample } = await supabase.from('staff').select('id').limit(1)
     if (!staffSample?.length && INITIAL_STAFF.length > 0) {
-      const staffRes = await supabase.from('staff').insert(
+      let staffRes = await supabase.from('staff').insert(
         INITIAL_STAFF.map(s => ({
           name: s.name,
           pin: s.pin ?? '0000',
@@ -182,6 +190,15 @@ async function seedSupabase() {
           active: true,
         })),
       )
+      if (staffRes.error) {
+        staffRes = await supabase.from('staff').insert(
+          INITIAL_STAFF.map(s => ({
+            name: s.name,
+            pin: s.pin ?? '0000',
+            role: s.role ?? 'staff',
+          })),
+        )
+      }
       logStaffWrite('insert', staffRes.error)
     }
     const { data: stockSample } = await supabase.from('stock_items').select('stock_key').limit(1)
@@ -249,19 +266,25 @@ async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
   }
 }
 
-/** Optional metadata columns — skipped silently if schema only has stock_key/qty. */
+/** Optional metadata columns — try progressively so a missing column does not 400 the whole bootstrap. */
 async function tryLoadStockDefinitionsFromSupabase(setStockDefinitions) {
   if (!supabase) return
-  const { data, error } = await supabase
-    .from('stock_items')
-    .select('stock_key, name, category, unit, bottle_yield, display_unit')
-  if (error || !data?.length) return
-  const hasDefinitions = data.some(row => row.name || row.category || row.unit || row.bottle_yield != null)
-  if (!hasDefinitions) return
-  setStockDefinitions(prev => {
-    const fallbackById = Object.fromEntries(prev.map(item => [item.id, item]))
-    return data.map(row => normaliseStockDefinitionRow(row, fallbackById[row.stock_key]))
-  })
+  const selects = [
+    'stock_key, name, category, unit, bottle_yield, display_unit',
+    'stock_key, name, category, unit, bottle_yield',
+    'stock_key, name, category, unit',
+  ]
+  for (const sel of selects) {
+    const { data, error } = await supabase.from('stock_items').select(sel)
+    if (error || !data?.length) continue
+    const hasDefinitions = data.some(row => row.name || row.category || row.unit || row.bottle_yield != null)
+    if (!hasDefinitions) return
+    setStockDefinitions(prev => {
+      const fallbackById = Object.fromEntries(prev.map(item => [item.id, item]))
+      return data.map(row => normaliseStockDefinitionRow(row, fallbackById[row.stock_key]))
+    })
+    return
+  }
 }
 
 /** Bootstrap: stock take qty from Supabase; definitions merged only when optional columns exist. */
@@ -1242,7 +1265,14 @@ export default function App() {
       supabase
         .from('staff')
         .insert({ id, name: cleanName, pin: cleanPin, role, active: true })
-        .then(({ error }) => logStaffWrite('insert', error))
+        .then(async ({ error }) => {
+          if (!error) {
+            logStaffWrite('insert', null)
+            return
+          }
+          const r2 = await supabase.from('staff').insert({ id, name: cleanName, pin: cleanPin, role })
+          logStaffWrite('insert', r2.error)
+        })
         .catch(err => logStaffWrite('insert', err))
     }
   }, [setStaff])

@@ -31,12 +31,21 @@ export default function BarView({ showToast }) {
 
   const loadOrders = useCallback(async () => {
     if (!supabase) return
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('bar_orders')
       .select('*')
       .eq('session_date', sessionDate)
       .eq('archived', false)
       .order('sent_at', { ascending: false })
+    if (error) {
+      const fb = await supabase
+        .from('bar_orders')
+        .select('*')
+        .eq('session_date', sessionDate)
+        .eq('archived', false)
+      data = fb.data
+      error = fb.error
+    }
     if (error) {
       console.warn('Bar orders load:', error.message)
       showToast?.('Could not load Bar Display System orders')

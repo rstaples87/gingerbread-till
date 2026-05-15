@@ -451,7 +451,12 @@ export default function Till({
       return false
     }
     try {
-      const { error } = await supabase.from('bar_orders').insert(payload)
+      let { error } = await supabase.from('bar_orders').insert(payload)
+      if (error && payload.notes != null) {
+        const { notes: _n, ...rest } = payload
+        const second = await supabase.from('bar_orders').insert(rest)
+        error = second.error
+      }
       logSupabaseWrite('bar_orders', 'insert', error)
       if (error) throw error
       return true
