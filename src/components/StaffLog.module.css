@@ -143,3 +143,34 @@
   border-radius: 999px;
   padding: 2px 7px;
 }
+
+.shiftSavedBanner {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  background: #e8f5e9;
+  border: 1px solid #c3e6cb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.saveShiftWrap {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f2f4f7;
+}
+
+.saveShiftBtn {
+  width: 100%;
+  background: var(--white);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.saveShiftBtn:active {
+  background: #f7f9fb;
+}

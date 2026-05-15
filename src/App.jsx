@@ -46,6 +46,86 @@ function uniqueNonEmpty(items) {
   return Array.from(new Set(items.map(item => String(item || '').trim()).filter(Boolean)))
 }
 
+function localDayBounds(d = new Date()) {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
+  return { start, end }
+}
+
+function isSameLocalCalendarDay(a, b) {
+  return (
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  )
+}
+
+function normaliseAttendanceRow(row) {
+  if (!row) return null
+  let action = row.action
+  if (action === 'in') action = 'clock_in'
+  if (action === 'out') action = 'clock_out'
+  return {
+    id: row.id,
+    staffName: row.staff_name ?? row.staffName,
+    action,
+    time: new Date(row.time),
+    saved: Boolean(row.saved),
+  }
+}
+
+function recomputeCurrentlyInFromTodaysLog(todayEntries) {
+  const sorted = [...todayEntries].sort((a, b) => new Date(a.time) - new Date(b.time))
+  const open = new Map()
+  for (const e of sorted) {
+    const name = e.staffName
+    if (e.action === 'clock_in') {
+      open.set(name, new Date(e.time))
+    }
+    if (e.action === 'clock_out') {
+      open.delete(name)
+    }
+  }
+  return Array.from(open.entries()).map(([staffName, clockInTime]) => ({ staffName, clockInTime }))
+}
+
+function insertAttendanceLogToSupabase({ id, staff_name, action, time }) {
+  if (!supabase) return
+  const row = { id, staff_name, action, time }
+  supabase
+    .from('attendance_log')
+    .insert(row)
+    .then(({ error }) => {
+      if (error) {
+        logSupabaseWrite('attendance_log', 'insert', error)
+      } else {
+        console.log('[Supabase write] attendance_log insert ok')
+      }
+    })
+    .catch((err) => {
+      logSupabaseWrite('attendance_log', 'insert', err)
+    })
+}
+
+async function loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn) {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase
+      .from('attendance_log')
+      .select('*')
+      .order('time', { ascending: true })
+      .limit(800)
+    if (error) throw error
+    const rows = (data || []).map(normaliseAttendanceRow).filter(Boolean)
+    setAttendanceLog(rows)
+    const now = new Date()
+    const todayRows = rows.filter(e => isSameLocalCalendarDay(new Date(e.time), now))
+    setCurrentlyIn(recomputeCurrentlyInFromTodaysLog(todayRows))
+  } catch (err) {
+    console.warn('loadAttendanceFromSupabase failed:', err?.message || err)
+  }
+}
+
 async function seedSupabase() {
   if (!supabase) return
   try {
@@ -459,6 +539,8 @@ export default function App() {
   tillStockSetterRef.current = setStockRaw
   const stockItemsSetterRef = useRef(setStockItemsRaw)
   stockItemsSetterRef.current = setStockItemsRaw
+  const attendanceLoadersRef = useRef({ setAttendanceLog, setCurrentlyIn })
+  attendanceLoadersRef.current = { setAttendanceLog, setCurrentlyIn }
   const mixerStockIds = stockDefinitions.filter(item => item.category === 'Mixers').map(item => item.id)
   const tillCategories = uniqueNonEmpty([
     ...DEFAULT_TILL_CATEGORIES,
@@ -474,7 +556,17 @@ export default function App() {
   // Restore Date objects from localStorage (they're serialised as strings)
   const hydratedTabs = openTabs.map(t => ({ ...t, openedAt: new Date(t.openedAt) }))
   const hydratedTx = transactions.map(t => ({ ...t, time: new Date(t.time) }))
-  const hydratedAttendanceLog = attendanceLog.map(e => ({ ...e, time: new Date(e.time) }))
+  const hydratedAttendanceLog = attendanceLog.map(e => {
+    let action = e.action
+    if (action === 'in') action = 'clock_in'
+    if (action === 'out') action = 'clock_out'
+    return {
+      ...e,
+      action,
+      time: new Date(e.time),
+      saved: Boolean(e.saved),
+    }
+  })
   const hydratedCurrentlyIn = currentlyIn.map(e => ({ ...e, clockInTime: new Date(e.clockInTime) }))
   const activeSaleStaff = (currentStaff && hydratedCurrentlyIn.some(row => row.staffName === currentStaff))
     ? currentStaff
@@ -499,6 +591,8 @@ export default function App() {
       await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
       if (cancelled) return
       await loadTransactionsFromSupabase(setTransactions)
+      if (cancelled) return
+      await loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn)
     })()
     return () => { cancelled = true }
   }, [])
@@ -554,6 +648,32 @@ export default function App() {
     subscribeTable(txChannelName, 'transactions', onTransactionsChange)
     subscribeTable(tillStockChannelName, 'till_stock', onTillStockChange)
     subscribeTable(stockItemsChannelName, 'stock_items', onStockItemsChange)
+
+    const onAttendanceChange = async () => {
+      const { setAttendanceLog: setLog, setCurrentlyIn: setIn } = attendanceLoadersRef.current
+      await loadAttendanceFromSupabase(setLog, setIn)
+    }
+    const attendanceChannel = supabase
+      .channel('till_realtime_attendance')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'attendance_log' },
+        onAttendanceChange,
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'attendance_log' },
+        onAttendanceChange,
+      )
+    attendanceChannel.subscribe((status, err) => {
+      if (status === 'CHANNEL_ERROR') {
+        console.warn(
+          '[Realtime] attendance_log channel error — ensure public.attendance_log is in supabase_realtime publication',
+          err,
+        )
+      }
+    })
+    channels.push(attendanceChannel)
 
     return () => {
       for (const channel of channels) {
@@ -1052,20 +1172,74 @@ export default function App() {
 
   const clockInStaff = useCallback((staffName) => {
     if (!staffName) return
+    const id =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `att_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const timeIso = new Date().toISOString()
     setCurrentlyIn(prev => {
       if (prev.some(row => row.staffName === staffName)) return prev
       return [...prev, { staffName, clockInTime: new Date() }]
     })
-    setAttendanceLog(prev => [...prev, { id: Date.now() + Math.random(), staffName, action: 'in', time: new Date() }])
+    setAttendanceLog(prev => [...prev, { id, staffName, action: 'clock_in', time: new Date(), saved: false }])
+    insertAttendanceLogToSupabase({
+      id,
+      staff_name: staffName,
+      action: 'clock_in',
+      time: timeIso,
+    })
     showToast(`${staffName} clocked in`)
   }, [setCurrentlyIn, setAttendanceLog, showToast])
 
   const clockOutStaff = useCallback((staffName) => {
     if (!staffName) return
+    const id =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `att_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const timeIso = new Date().toISOString()
     setCurrentlyIn(prev => prev.filter(row => row.staffName !== staffName))
-    setAttendanceLog(prev => [...prev, { id: Date.now() + Math.random(), staffName, action: 'out', time: new Date() }])
+    setAttendanceLog(prev => [...prev, { id, staffName, action: 'clock_out', time: new Date(), saved: false }])
+    insertAttendanceLogToSupabase({
+      id,
+      staff_name: staffName,
+      action: 'clock_out',
+      time: timeIso,
+    })
     showToast(`${staffName} clocked out`)
   }, [setCurrentlyIn, setAttendanceLog, showToast])
+
+  const saveShiftLogForToday = useCallback(async () => {
+    if (!window.confirm('Save and close shift log for today?')) return
+    const todayStarts = localDayBounds()
+    const hasToday = attendanceLog.some(e =>
+      isSameLocalCalendarDay(new Date(e.time), new Date()),
+    )
+    if (!hasToday) {
+      showToast('No attendance entries today')
+      return
+    }
+    if (supabase) {
+      const { error } = await supabase
+        .from('attendance_log')
+        .update({ saved: true })
+        .gte('time', todayStarts.start.toISOString())
+        .lt('time', todayStarts.end.toISOString())
+      logSupabaseWrite('attendance_log', 'update', error)
+      if (error) {
+        showToast('Could not save shift log')
+        return
+      }
+      await loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn)
+    } else {
+      setAttendanceLog(prev =>
+        prev.map(e =>
+          isSameLocalCalendarDay(new Date(e.time), new Date()) ? { ...e, saved: true } : e,
+        ),
+      )
+    }
+    showToast('Shift log saved')
+  }, [attendanceLog, setAttendanceLog, setCurrentlyIn, showToast])
 
   const sharedProps = {
     products, setProducts,
@@ -1081,6 +1255,7 @@ export default function App() {
     attendanceLog: hydratedAttendanceLog, setAttendanceLog,
     currentlyIn: hydratedCurrentlyIn, setCurrentlyIn,
     clockInStaff, clockOutStaff,
+    saveShiftLogForToday,
     transactions: hydratedTx, setTransactions,
     openTabs: hydratedTabs, setOpenTabs,
     orders, updateOrder, clearOrder,

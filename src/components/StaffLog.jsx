@@ -15,7 +15,17 @@ function timeLabel(d) {
   return new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function StaffLog({ staff, setStaff, currentlyIn, setCurrentlyIn, attendanceLog, clockInStaff, clockOutStaff, currentStaff }) {
+export default function StaffLog({
+  staff,
+  setStaff,
+  currentlyIn,
+  setCurrentlyIn,
+  attendanceLog,
+  clockInStaff,
+  clockOutStaff,
+  saveShiftLogForToday,
+  currentStaff,
+}) {
   const [selectedStaff, setSelectedStaff] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
   const [newName, setNewName] = useState('')
@@ -45,8 +55,11 @@ export default function StaffLog({ staff, setStaff, currentlyIn, setCurrentlyIn,
 
   const todaysLog = useMemo(
     () => (attendanceLog || []).filter(e => isToday(e.time)).sort((a, b) => new Date(b.time) - new Date(a.time)),
-    [attendanceLog]
+    [attendanceLog],
   )
+
+  const shiftSaved =
+    todaysLog.length > 0 && todaysLog.every(e => e.saved === true)
 
   const addStaff = () => {
     const n = (newName || '').trim()
@@ -185,6 +198,9 @@ export default function StaffLog({ staff, setStaff, currentlyIn, setCurrentlyIn,
 
         <section className={styles.card}>
           <h3 className={styles.title}>Today's log</h3>
+          {shiftSaved && (
+            <div className={styles.shiftSavedBanner}>Shift saved ✓</div>
+          )}
           {todaysLog.length === 0 ? (
             <div className={styles.empty}>No attendance entries yet today.</div>
           ) : (
@@ -192,14 +208,19 @@ export default function StaffLog({ staff, setStaff, currentlyIn, setCurrentlyIn,
               {todaysLog.map(entry => (
                 <div className={styles.logRow} key={entry.id}>
                   <span className={styles.logName}>{entry.staffName}</span>
-                  <span className={entry.action === 'in' ? styles.badgeIn : styles.badgeOut}>
-                    {entry.action === 'in' ? 'Clocked in' : 'Clocked out'}
+                  <span className={entry.action === 'clock_in' ? styles.badgeIn : styles.badgeOut}>
+                    {entry.action === 'clock_in' ? 'Clocked in' : 'Clocked out'}
                   </span>
                   <span className={styles.logTime}>{timeLabel(entry.time)}</span>
                 </div>
               ))}
             </div>
           )}
+          <div className={styles.saveShiftWrap}>
+            <button type="button" className={styles.saveShiftBtn} onClick={saveShiftLogForToday}>
+              Save shift log
+            </button>
+          </div>
         </section>
       </div>
     </div>
