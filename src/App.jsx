@@ -33,19 +33,6 @@ import {
   upsertTillStockRowToSupabase,
 } from './tillStockSupabase'
 
-function normaliseStockDefinitionRow(row, fallback) {
-  return {
-    ...(fallback || {}),
-    id: row.stock_key,
-    name: row.name || fallback?.name || row.stock_key,
-    category: row.category || fallback?.category || 'Other Spirits',
-    unit: row.unit || fallback?.unit || 'bottle',
-    displayUnit: row.display_unit || fallback?.displayUnit,
-    bottleYield: row.bottle_yield != null ? Number(row.bottle_yield) : fallback?.bottleYield,
-    stock: Number(row.qty ?? fallback?.stock ?? 0),
-  }
-}
-
 function uniqueNonEmpty(items) {
   return Array.from(new Set(items.map(item => String(item || '').trim()).filter(Boolean)))
 }
@@ -270,32 +257,9 @@ async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
   }
 }
 
-/** Optional metadata columns — try progressively so a missing column does not 400 the whole bootstrap. */
-async function tryLoadStockDefinitionsFromSupabase(setStockDefinitions) {
-  if (!supabase) return
-  const selects = [
-    'stock_key, name, category, unit, bottle_yield, display_unit',
-    'stock_key, name, category, unit, bottle_yield',
-    'stock_key, name, category, unit',
-  ]
-  for (const sel of selects) {
-    const { data, error } = await supabase.from('stock_items').select(sel)
-    if (error || !data?.length) continue
-    const hasDefinitions = data.some(row => row.name || row.category || row.unit || row.bottle_yield != null)
-    if (!hasDefinitions) return
-    setStockDefinitions(prev => {
-      const fallbackById = Object.fromEntries(prev.map(item => [item.id, item]))
-      return data.map(row => normaliseStockDefinitionRow(row, fallbackById[row.stock_key]))
-    })
-    return
-  }
-}
-
-/** Bootstrap: stock take qty from Supabase; definitions merged only when optional columns exist. */
-async function loadStockFromSupabase(setStockItemsRaw, setStockDefinitions) {
-  const count = await loadStockItemsFromSupabase(setStockItemsRaw)
-  if (setStockDefinitions) await tryLoadStockDefinitionsFromSupabase(setStockDefinitions)
-  return count
+/** Bootstrap: stock take qty from Supabase (definitions stay in localStorage only). */
+async function loadStockFromSupabase(setStockItemsRaw) {
+  return loadStockItemsFromSupabase(setStockItemsRaw)
 }
 
 const onTillStockUpsertQueueable = (row, err) =>
@@ -303,24 +267,8 @@ const onTillStockUpsertQueueable = (row, err) =>
 
 async function upsertStockDefinitionToSupabase(item, qty) {
   if (!supabase) return
-  const qtyVal = Number(qty ?? item.stock ?? 0)
-  const fullRow = {
-    stock_key: item.id,
-    qty: qtyVal,
-    name: item.name,
-    category: item.category,
-    unit: item.unit,
-    bottle_yield: item.bottleYield == null ? null : Number(item.bottleYield),
-    display_unit: item.displayUnit || null,
-  }
-  let { error } = await supabase.from('stock_items').upsert(fullRow, { onConflict: 'stock_key' })
-  if (error) {
-    const minimal = await supabase.from('stock_items').upsert(
-      { stock_key: item.id, qty: qtyVal },
-      { onConflict: 'stock_key' },
-    )
-    error = minimal.error
-  }
+  const row = { stock_key: item.id, qty: Number(qty ?? item.stock ?? 0) }
+  const { error } = await supabase.from('stock_items').upsert(row, { onConflict: 'stock_key' })
   logSupabaseWrite('stock_items', 'upsert', error)
   if (error) throw error
 }
@@ -611,7 +559,7 @@ export default function App() {
       if (cancelled) return
       if (supabase) await loadStaffFromSupabase(setStaff)
       if (cancelled) return
-      await loadStockFromSupabase(setStockItemsRaw, setStockDefinitions)
+      await loadStockFromSupabase(setStockItemsRaw)
       if (cancelled) return
       await loadTillStockFromSupabase(setStockRaw)
       if (cancelled) return
