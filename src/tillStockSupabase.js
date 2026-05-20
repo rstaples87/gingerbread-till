@@ -76,8 +76,12 @@ export function upsertTillStockRowToSupabase(productId, qty, onQueueableFailure)
 }
 
 export async function loadTillStockFromSupabase(setStockRaw, options = {}) {
-  if (!supabase) return 0
-  const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
+  const { fallback, retryOnEmpty } = options
+  if (!supabase) {
+    if (fallback != null) setStockRaw(fallback)
+    return 0
+  }
+  const retryDelaysMs = retryOnEmpty ? [0, 120, 300] : [0]
   let lastData = null
   try {
     for (let i = 0; i < retryDelaysMs.length; i++) {
@@ -89,12 +93,16 @@ export async function loadTillStockFromSupabase(setStockRaw, options = {}) {
       if (data?.length) break
     }
     const rows = lastData ?? []
+    if (!rows.length) {
+      if (fallback != null) setStockRaw(fallback)
+      return 0
+    }
     const next = {}
     for (const row of rows) {
       if (row?.product_id == null) continue
       next[Number(row.product_id)] = normaliseQtyFromRow(row)
     }
-    if (rows.length && tillStockQtyColumn === null) {
+    if (tillStockQtyColumn === null) {
       const r = rows[0]
       if (r && Object.prototype.hasOwnProperty.call(r, 'quantity') && !Object.prototype.hasOwnProperty.call(r, 'qty')) {
         tillStockQtyColumn = 'quantity'
@@ -106,6 +114,7 @@ export async function loadTillStockFromSupabase(setStockRaw, options = {}) {
     return rows.length
   } catch (err) {
     console.warn('loadTillStockFromSupabase failed:', err?.message || err)
+    if (fallback != null) setStockRaw(fallback)
     return 0
   }
 }

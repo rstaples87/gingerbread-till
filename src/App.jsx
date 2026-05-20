@@ -63,8 +63,11 @@ function normaliseStaffRow(row) {
   }
 }
 
-async function loadStaffFromSupabase(setStaff) {
-  if (!supabase) return
+async function loadStaffFromSupabase(setStaff, fallback) {
+  if (!supabase) {
+    if (fallback != null) setStaff(fallback)
+    return false
+  }
   try {
     let { data, error } = await supabase
       .from('staff')
@@ -83,9 +86,16 @@ async function loadStaffFromSupabase(setStaff) {
       .filter(r => r.active !== false)
       .map(normaliseStaffRow)
       .filter(Boolean)
+    if (!rows.length) {
+      if (fallback != null) setStaff(fallback)
+      return false
+    }
     setStaff(rows)
+    return true
   } catch (err) {
     console.warn('loadStaffFromSupabase failed:', err?.message || err)
+    if (fallback != null) setStaff(fallback)
+    return false
   }
 }
 
@@ -230,8 +240,12 @@ function syncStockToSupabase(map) {
 }
 
 async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
-  if (!supabase) return 0
-  const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
+  const { fallback, retryOnEmpty } = options
+  if (!supabase) {
+    if (fallback != null) setStockItemsRaw(fallback)
+    return 0
+  }
+  const retryDelaysMs = retryOnEmpty ? [0, 120, 300] : [0]
   let lastData = null
   try {
     for (let i = 0; i < retryDelaysMs.length; i++) {
@@ -243,17 +257,19 @@ async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
       if (data?.length) break
     }
     const rows = lastData ?? []
-    if (!rows.length) return 0
-    setStockItemsRaw(prev => {
-      const next = { ...prev }
-      for (const row of rows) {
-        next[row.stock_key] = Number(row.qty)
-      }
-      return next
-    })
+    if (!rows.length) {
+      if (fallback != null) setStockItemsRaw(fallback)
+      return 0
+    }
+    const next = {}
+    for (const row of rows) {
+      next[row.stock_key] = Number(row.qty)
+    }
+    setStockItemsRaw(next)
     return rows.length
   } catch (err) {
     console.warn('loadStockItemsFromSupabase failed:', err?.message || err)
+    if (fallback != null) setStockItemsRaw(fallback)
     return 0
   }
 }
@@ -335,10 +351,22 @@ function deleteTabFromSupabase(tabId) {
     })
 }
 
+function applyTabsFallback(setOpenTabs, setOrders, setTabIdCounter, fallback) {
+  if (!fallback) return
+  setOpenTabs(fallback.openTabs ?? [])
+  setOrders(fallback.orders ?? { quick: {} })
+  if (fallback.tabIdCounter != null) {
+    setTabIdCounter(fallback.tabIdCounter)
+  }
+}
+
 async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, options = {}) {
-  if (!supabase) return []
-  // No session_date or other filters — full table. Retries help read-after-write when Realtime fires before SELECT sees the row.
-  const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
+  const { fallback, retryOnEmpty } = options
+  if (!supabase) {
+    applyTabsFallback(setOpenTabs, setOrders, setTabIdCounter, fallback)
+    return []
+  }
+  const retryDelaysMs = retryOnEmpty ? [0, 120, 300] : [0]
   let lastData = null
   try {
     for (let i = 0; i < retryDelaysMs.length; i++) {
@@ -353,9 +381,11 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
       if (data?.length) break
     }
     const rows = lastData ?? []
-    const tabs = rows.length
-      ? rows.map(row => normaliseTabRowLive(row)).filter(Boolean)
-      : []
+    if (!rows.length) {
+      applyTabsFallback(setOpenTabs, setOrders, setTabIdCounter, fallback)
+      return []
+    }
+    const tabs = rows.map(row => normaliseTabRowLive(row)).filter(Boolean)
     setOpenTabs(tabs)
     setOrders(prev => {
       const next = { ...prev }
@@ -379,8 +409,30 @@ async function loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, opt
     return tabs
   } catch (err) {
     console.warn('loadTabsFromSupabase failed:', err?.message || err)
+    applyTabsFallback(setOpenTabs, setOrders, setTabIdCounter, fallback)
     return []
   }
+}
+
+/** Supabase-first bootstrap; localStorage snapshots used only on fail/empty. */
+async function bootstrapSharedDataFromSupabase({
+  staffFallback,
+  stockItemsFallback,
+  stockFallback,
+  tabsFallback,
+  setStaff,
+  setStockItemsRaw,
+  setStockRaw,
+  setOpenTabs,
+  setOrders,
+  setTabIdCounter,
+}) {
+  await Promise.all([
+    loadStaffFromSupabase(setStaff, staffFallback),
+    loadStockItemsFromSupabase(setStockItemsRaw, { fallback: stockItemsFallback }),
+    loadTillStockFromSupabase(setStockRaw, { fallback: stockFallback }),
+    loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter, { fallback: tabsFallback }),
+  ])
 }
 
 async function loadTransactionsFromSupabase(setTransactions, options = {}) {
@@ -516,23 +568,47 @@ export default function App() {
     if (!isSupabaseConfigured) {
       console.warn('[Supabase write] disabled — VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY missing at build time')
     }
+    const staffFallback = structuredClone(staff)
+    const stockItemsFallback = structuredClone(stockItems)
+    const stockFallback = structuredClone(stock)
+    const tabsFallback = {
+      openTabs: structuredClone(openTabs),
+      orders: structuredClone(orders),
+      tabIdCounter,
+    }
     let cancelled = false
     ;(async () => {
       await seedSupabase()
       if (cancelled) return
-      if (supabase) await loadStaffFromSupabase(setStaff)
-      if (cancelled) return
-      await loadStockFromSupabase(setStockItemsRaw)
-      if (cancelled) return
-      await loadTillStockFromSupabase(setStockRaw)
-      if (cancelled) return
-      await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
+      await bootstrapSharedDataFromSupabase({
+        staffFallback,
+        stockItemsFallback,
+        stockFallback,
+        tabsFallback,
+        setStaff,
+        setStockItemsRaw,
+        setStockRaw,
+        setOpenTabs,
+        setOrders,
+        setTabIdCounter,
+      })
       if (cancelled) return
       // Session transactions live in localStorage only — not bulk-loaded from Supabase
       if (cancelled) return
       await loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn)
     })()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only bootstrap; fallbacks are initial localStorage snapshot
+  }, [])
+
+  useEffect(() => {
+    const refreshStockFromSupabase = () => {
+      if (!supabase) return
+      loadTillStockFromSupabase(tillStockSetterRef.current, { retryOnEmpty: true })
+      loadStockItemsFromSupabase(stockItemsSetterRef.current, { retryOnEmpty: true })
+    }
+    window.addEventListener('focus', refreshStockFromSupabase)
+    return () => window.removeEventListener('focus', refreshStockFromSupabase)
   }, [])
 
   useEffect(() => {
@@ -556,7 +632,7 @@ export default function App() {
     }
 
     const onStaffChange = async () => {
-      await loadStaffFromSupabase(staffSetterRef.current)
+      await loadStaffFromSupabase(staffSetterRef.current, null)
     }
 
     const subscribeTable = (channelName, table, handler) => {
