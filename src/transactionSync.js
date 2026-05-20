@@ -89,3 +89,32 @@ export async function fetchTransactionsBySessionDate(sessionDate) {
 
   return (data ?? []).map(row => normaliseTransactionRowLive(row)).filter(Boolean)
 }
+
+/** Prefer voided state and newest time when the same id appears twice. */
+export function dedupeTransactionsById(transactions) {
+  const byId = new Map()
+  for (const tx of transactions || []) {
+    if (tx?.id == null) continue
+    const cur = byId.get(tx.id)
+    if (!cur) {
+      byId.set(tx.id, tx)
+      continue
+    }
+    const pick =
+      (tx.voided && !cur.voided)
+        ? tx
+        : (!tx.voided && cur.voided)
+          ? cur
+          : new Date(tx.time) >= new Date(cur.time)
+            ? tx
+            : cur
+    byId.set(tx.id, pick)
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(b.time).getTime() - new Date(a.time).getTime(),
+  )
+}
+
+export function mergeTransactionsDeduped(...lists) {
+  return dedupeTransactionsById(lists.flat())
+}

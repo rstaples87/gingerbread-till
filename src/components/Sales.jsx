@@ -258,7 +258,12 @@ export default function Sales({
     }
   }, [transactions, reportOpen])
 
-  const live = transactions.filter(t => !t.voided)
+  const todaySessionDate = localSessionDateString()
+  const sessionTransactions = useMemo(() => {
+    return transactions.filter(t => (t.sessionDate ?? todaySessionDate) === todaySessionDate)
+  }, [transactions, todaySessionDate])
+
+  const live = sessionTransactions.filter(t => !t.voided)
   const totalTakings = live.reduce((s, t) => s + t.total, 0)
   const cashTotal = live.filter(t => t.payment === 'cash').reduce((s, t) => s + t.total, 0)
   const cardTotal = live.filter(t => t.payment === 'card').reduce((s, t) => s + t.total, 0)
@@ -278,7 +283,7 @@ export default function Sales({
   })
 
   const tabTx = live.filter(t => t.type === 'tab')
-  const voidedTx = transactions.filter(t => t.voided)
+  const voidedTx = sessionTransactions.filter(t => t.voided)
 
   const stockItemById = useMemo(() => Object.fromEntries(stockDefinitions.map(s => [s.id, s])), [stockDefinitions])
 
@@ -316,11 +321,11 @@ export default function Sales({
     staffMap,
     tabTx,
     voidedTx,
-    transactions,
+    transactions: sessionTransactions,
   }), [
     reportHeaderSubtitle, float, actualCashParsed, liveDiscrepancy, discrepancyReason,
     expectedCashInTill, totalTakings, totalItems, cashTotal, cardTotal, accountTotal,
-    live.length, popSorted, staffMap, tabTx, voidedTx, transactions,
+    live.length, popSorted, staffMap, tabTx, voidedTx, sessionTransactions,
   ])
 
   const confirmCloseTill = useCallback(async () => {
@@ -460,7 +465,7 @@ export default function Sales({
         <button type="button" className={styles.reportBtn} onClick={openEodReport}>📊 End of night report</button>
         <button type="button" className={styles.pastReportsBtn} onClick={openPastReportsOverlay}>Past reports</button>
         <button type="button" className={styles.reportBtnSecondary} onClick={() => setStockReportOpen(true)}>📦 Stock report</button>
-        {!transactions.length ? (
+        {!sessionTransactions.length ? (
           <div className={styles.empty}>No sales yet</div>
         ) : (
           <>
@@ -474,7 +479,7 @@ export default function Sales({
               )}
             </div>
 
-            {transactions.map(tx => {
+            {sessionTransactions.map(tx => {
               const time = new Date(tx.time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
               return (
                 <div key={tx.id} className={`${styles.txCard} ${tx.voided ? styles.txVoided : ''}`}>

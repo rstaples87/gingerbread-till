@@ -24,11 +24,13 @@ import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
 import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue, SYNC_QUEUE_KEY } from './syncQueue'
-import { syncTransactionToSupabaseFireAndForget } from './transactionSync'
 import {
-  normaliseTabRowLive,
-  normaliseTransactionRowLive,
-} from './supabaseRealtimeMerge'
+  syncTransactionToSupabaseFireAndForget,
+  fetchTransactionsBySessionDate,
+  dedupeTransactionsById,
+  mergeTransactionsDeduped,
+} from './transactionSync'
+import { normaliseTabRowLive } from './supabaseRealtimeMerge'
 import {
   loadTillStockFromSupabase,
   upsertTillStockRowToSupabase,
@@ -435,27 +437,32 @@ async function bootstrapSharedDataFromSupabase({
   ])
 }
 
-async function loadTransactionsFromSupabase(setTransactions, options = {}) {
-  if (!supabase) return 0
-  const retryDelaysMs = options.retryOnEmpty ? [0, 120, 300] : [0]
-  let lastData = null
-  try {
-    for (let i = 0; i < retryDelaysMs.length; i++) {
-      const wait = retryDelaysMs[i]
-      if (wait > 0) await new Promise(r => setTimeout(r, wait))
-      const { data, error } = await supabase.from('transactions').select('*').order('time', { ascending: false })
-      if (error) throw error
-      lastData = data
-      if (data?.length) break
+/** Load today's session transactions from Supabase and merge with local state (deduped by id). */
+async function loadTodaySessionTransactionsFromSupabase(setTransactions, fallback = []) {
+  const sessionDate = localSessionDateString()
+  if (!supabase) {
+    if (fallback.length) {
+      setTransactions(prev => mergeTransactionsDeduped(prev, fallback))
     }
-    const rows = lastData ?? []
-    const txs = rows.length
-      ? rows.map(row => normaliseTransactionRowLive(row)).filter(Boolean)
-      : []
-    setTransactions(txs)
-    return txs.length
+    return 0
+  }
+  try {
+    const fetched = await fetchTransactionsBySessionDate(sessionDate)
+    let count = 0
+    setTransactions(prev => {
+      const merged = mergeTransactionsDeduped(prev, fetched)
+      if (merged.length === 0 && fallback.length) {
+        return mergeTransactionsDeduped(fallback)
+      }
+      count = merged.length
+      return merged
+    })
+    return count
   } catch (err) {
-    console.warn('loadTransactionsFromSupabase failed:', err?.message || err)
+    console.warn('loadTodaySessionTransactionsFromSupabase failed:', err?.message || err)
+    if (fallback.length) {
+      setTransactions(prev => mergeTransactionsDeduped(prev, fallback))
+    }
     return 0
   }
 }
@@ -519,7 +526,7 @@ export default function App() {
   }
   const transactionsSetterRef = useRef(setTransactions)
   transactionsSetterRef.current = setTransactions
-  /** After close till, session txs are local-only until the next close */
+  /** After close till, skip focus refresh until a new sale starts */
   const sessionClearedRef = useRef(false)
   const tillStockSetterRef = useRef(setStockRaw)
   tillStockSetterRef.current = setStockRaw
@@ -593,7 +600,8 @@ export default function App() {
         setTabIdCounter,
       })
       if (cancelled) return
-      // Session transactions live in localStorage only — not bulk-loaded from Supabase
+      const transactionsFallback = structuredClone(transactions)
+      await loadTodaySessionTransactionsFromSupabase(setTransactions, transactionsFallback)
       if (cancelled) return
       await loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn)
     })()
@@ -602,13 +610,16 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const refreshStockFromSupabase = () => {
+    const refreshFromSupabaseOnFocus = () => {
       if (!supabase) return
       loadTillStockFromSupabase(tillStockSetterRef.current, { retryOnEmpty: true })
       loadStockItemsFromSupabase(stockItemsSetterRef.current, { retryOnEmpty: true })
+      if (!sessionClearedRef.current) {
+        loadTodaySessionTransactionsFromSupabase(transactionsSetterRef.current, [])
+      }
     }
-    window.addEventListener('focus', refreshStockFromSupabase)
-    return () => window.removeEventListener('focus', refreshStockFromSupabase)
+    window.addEventListener('focus', refreshFromSupabaseOnFocus)
+    return () => window.removeEventListener('focus', refreshFromSupabaseOnFocus)
   }, [])
 
   useEffect(() => {
@@ -815,11 +826,12 @@ export default function App() {
   }, [])
 
   const addTransaction = useCallback((tx) => {
+    sessionClearedRef.current = false
     const withSession = {
       ...tx,
       sessionDate: tx.sessionDate ?? localSessionDateString(),
     }
-    setTransactions(prev => [withSession, ...prev])
+    setTransactions(prev => dedupeTransactionsById([withSession, ...prev]))
     syncTransactionToSupabaseFireAndForget(withSession)
   }, [setTransactions])
 
