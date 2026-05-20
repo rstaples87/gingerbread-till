@@ -26,10 +26,11 @@ import Toast from './components/Toast'
 import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue, SYNC_QUEUE_KEY } from './syncQueue'
 import {
   syncTransactionToSupabaseFireAndForget,
-  fetchTransactionsBySessionDate,
+  fetchTodayTransactionsFromSupabase,
   dedupeTransactionsById,
   mergeTransactionsDeduped,
 } from './transactionSync'
+import { loadEodReportsWithFallback } from './eodReportsSupabase'
 import { normaliseTabRowLive } from './supabaseRealtimeMerge'
 import {
   loadTillStockFromSupabase,
@@ -439,7 +440,6 @@ async function bootstrapSharedDataFromSupabase({
 
 /** Load today's session transactions from Supabase and merge with local state (deduped by id). */
 async function loadTodaySessionTransactionsFromSupabase(setTransactions, fallback = []) {
-  const sessionDate = localSessionDateString()
   if (!supabase) {
     if (fallback.length) {
       setTransactions(prev => mergeTransactionsDeduped(prev, fallback))
@@ -447,7 +447,7 @@ async function loadTodaySessionTransactionsFromSupabase(setTransactions, fallbac
     return 0
   }
   try {
-    const fetched = await fetchTransactionsBySessionDate(sessionDate)
+    const fetched = await fetchTodayTransactionsFromSupabase()
     let count = 0
     setTransactions(prev => {
       const merged = mergeTransactionsDeduped(prev, fetched)
@@ -515,6 +515,7 @@ export default function App() {
   const [staffOverlayOpen, setStaffOverlayOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', visible: false })
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
+  const [eodReports, setEodReports] = useState([])
   const tabsLoadSettersRef = useRef({ setOpenTabs, setOrders, setTabIdCounter })
   tabsLoadSettersRef.current = { setOpenTabs, setOrders, setTabIdCounter }
   const tabsRealtimeChannelNameRef = useRef(null)
@@ -602,6 +603,9 @@ export default function App() {
       if (cancelled) return
       const transactionsFallback = structuredClone(transactions)
       await loadTodaySessionTransactionsFromSupabase(setTransactions, transactionsFallback)
+      if (cancelled) return
+      const reports = await loadEodReportsWithFallback()
+      if (!cancelled) setEodReports(reports)
       if (cancelled) return
       await loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn)
     })()
@@ -1379,6 +1383,13 @@ export default function App() {
     saveShiftLogForToday,
     transactions: hydratedTx, setTransactions,
     clearSessionTransactions,
+    eodReports,
+    setEodReports,
+    refreshEodReports: async () => {
+      const reports = await loadEodReportsWithFallback()
+      setEodReports(reports)
+      return reports
+    },
     openTabs: hydratedTabs, setOpenTabs,
     orders, updateOrder, clearOrder,
     activeOrderKey, switchOrder,

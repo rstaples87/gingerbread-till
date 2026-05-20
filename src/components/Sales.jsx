@@ -1,12 +1,9 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { flushSync } from 'react-dom'
 import { fmt, mixerBottleDeductionForLine, formatStockItemQuantity, localSessionDateString } from '../utils'
-import { useLocalStorage } from '../useLocalStorage'
-import {
-  buildEodReportData,
-  persistEodReportEntry,
-  readSavedEodReportsFromStorage,
-} from '../eodReports'
+import { buildEodReportData } from '../eodReports'
+import { persistEodReportEntryRemote } from '../eodReportsSupabase'
+import { todaySessionDateForSupabase } from '../transactionSync'
 import { fetchTransactionsBySessionDate } from '../transactionSync'
 import EndOfNightReportBody from './EndOfNightReportBody'
 import styles from './Sales.module.css'
@@ -211,6 +208,7 @@ function stockRowHighlight(stockVal, bottleYield) {
 export default function Sales({
   transactions, currentlyIn, setTransactions,
   clearSessionTransactions,
+  eodReports, setEodReports, refreshEodReports,
   voidTransaction, products,
   stockItems, stockDefinitions, productVariants, showToast,
 }) {
@@ -224,7 +222,6 @@ export default function Sales({
   const [float, setFloat] = useState(50)
   const [actualCashInTill, setActualCashInTill] = useState('')
   const [discrepancyReason, setDiscrepancyReason] = useState('')
-  const [eodReports, setEodReports] = useLocalStorage('bt_eod_reports', [])
   const [closingTill, setClosingTill] = useState(false)
   const closeTillInFlightRef = useRef(false)
   const transactionsRef = useRef(transactions)
@@ -245,11 +242,16 @@ export default function Sales({
     setReportOpen(false)
   }, [])
 
-  const openPastReportsOverlay = useCallback(() => {
-    setSavedPastReports(readSavedEodReportsFromStorage())
+  const openPastReportsOverlay = useCallback(async () => {
+    if (refreshEodReports) {
+      const reports = await refreshEodReports()
+      setSavedPastReports(reports)
+    } else {
+      setSavedPastReports(eodReports)
+    }
     setPastReportsOpen(true)
     setExpandedPastReportId(null)
-  }, [])
+  }, [eodReports, refreshEodReports])
 
   // EOD overlay opens only via openEodReport — never when transactions change
   useEffect(() => {
@@ -258,9 +260,12 @@ export default function Sales({
     }
   }, [transactions, reportOpen])
 
-  const todaySessionDate = localSessionDateString()
+  const todaySessionDate = todaySessionDateForSupabase()
   const sessionTransactions = useMemo(() => {
-    return transactions.filter(t => (t.sessionDate ?? todaySessionDate) === todaySessionDate)
+    return transactions.filter(t => {
+      const txDate = t.sessionDate ?? t.session_date
+      return txDate === todaySessionDate
+    })
   }, [transactions, todaySessionDate])
 
   const live = sessionTransactions.filter(t => !t.voided)
@@ -388,7 +393,7 @@ export default function Sales({
         voidedTx: snapVoidedTx,
         transactions: txsToSave,
       })
-      const session_date = localSessionDateString()
+      const session_date = todaySessionDateForSupabase()
       const entry = {
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
@@ -398,10 +403,10 @@ export default function Sales({
         totalTakings: snapTotalTakings,
         reportData,
       }
-      const nextReports = persistEodReportEntry(snapEodReports, entry)
+      const nextReports = await persistEodReportEntryRemote(snapEodReports, entry)
       setEodReports(nextReports)
       setSavedPastReports(nextReports)
-      console.log('[close till] EOD report saved to localStorage, count:', nextReports.length)
+      console.log('[close till] EOD report saved, count:', nextReports.length)
 
       // Step 2: Clear session in App (after EOD persist)
       await clearSessionTransactions()
@@ -449,7 +454,7 @@ export default function Sales({
   }, [
     transactions, float, actualCashInTill, discrepancyReason,
     eodReports, reportHeaderSubtitle, visibleStaff,
-    setEodReports, clearSessionTransactions, closeEodReport, showToast,
+    setEodReports, refreshEodReports, clearSessionTransactions, closeEodReport, showToast,
   ])
 
   const formatPastReportDate = (entry) => {

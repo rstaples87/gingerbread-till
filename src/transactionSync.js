@@ -72,6 +72,35 @@ export async function syncTransactionToSupabase(tx) {
   }
 }
 
+/** UTC calendar date YYYY-MM-DD — must match session_date written on insert. */
+export function todaySessionDateForSupabase() {
+  return new Date().toISOString().split('T')[0]
+}
+
+/** Today's session transactions for the Sales view. */
+export async function fetchTodayTransactionsFromSupabase() {
+  const sessionDate = todaySessionDateForSupabase()
+  if (!supabase) {
+    console.log('[transactions] session_date:', sessionDate, 'rows:', 0, '(no supabase)')
+    return []
+  }
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('session_date', sessionDate)
+    .order('time', { ascending: false })
+
+  if (error) {
+    console.warn('fetchTodayTransactionsFromSupabase:', error)
+    throw error
+  }
+
+  const rows = (data ?? []).map(row => normaliseTransactionRowLive(row)).filter(Boolean)
+  console.log('[transactions] session_date:', sessionDate, 'rows:', rows.length)
+  return rows
+}
+
 /** Load all transactions for a session date (past EOD reports). */
 export async function fetchTransactionsBySessionDate(sessionDate) {
   if (!supabase || !sessionDate) return []
