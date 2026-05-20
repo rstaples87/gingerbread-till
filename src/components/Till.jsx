@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, getOrderTotal, orderToItems, mixerServesPerDrink, tabTotal, localSessionDateString } from '../utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString } from '../utils'
 import { supabase } from '../supabase'
 import { logSupabaseWrite } from '../supabaseWriteLog'
 import styles from './Till.module.css'
@@ -41,6 +41,8 @@ export default function Till({
   const [postSendBdsPrompt, setPostSendBdsPrompt] = useState(false)
   const [tabOrderNotes, setTabOrderNotes] = useState('')
   const stockItemById = Object.fromEntries(stockDefinitions.map(i => [i.id, i]))
+
+  const variantDisplayName = (stockId) => (stockId ? stockItemById[stockId]?.name : null) || null
 
   useEffect(() => {
     setTabOrderNotes('')
@@ -187,7 +189,14 @@ export default function Till({
       return
     }
     if (variant.stockIds.length === 1) {
-      setNumpad({ productId, value: '1', selectedStockId: variant.stockIds[0], selectedMixerId: null })
+      const stockId = variant.stockIds[0]
+      setNumpad({
+        productId,
+        value: '1',
+        selectedStockId: stockId,
+        selectedMixerId: null,
+        displayName: variantDisplayName(stockId),
+      })
       return
     }
     const options = variant.stockIds.map(id => ({
@@ -258,7 +267,12 @@ export default function Till({
       const existingQty = typeof existing === 'number' ? existing : (existing?.qty || 0)
       const selectedStockId = numpad.selectedStockId ?? (typeof existing === 'object' ? existing?.selectedStockId : null)
       const selectedMixerId = numpad.selectedMixerId ?? (typeof existing === 'object' ? existing?.selectedMixerId : null)
-      return { ...prev, [id]: { qty: existingQty + qty, selectedStockId, selectedMixerId } }
+      const displayName =
+        numpad.displayName
+        ?? variantDisplayName(selectedStockId)
+        ?? (typeof existing === 'object' ? existing?.displayName : null)
+        ?? null
+      return { ...prev, [id]: { qty: existingQty + qty, selectedStockId, selectedMixerId, displayName } }
     })
     setNumpad(null)
     showToast(`Added ${qty}× ${product.name}`)
@@ -303,7 +317,8 @@ export default function Till({
       const prevLine = prev[id]
       const selectedStockId = typeof prevLine === 'object' ? prevLine?.selectedStockId : null
       const selectedMixerId = typeof prevLine === 'object' ? prevLine?.selectedMixerId : null
-      return { ...prev, [id]: { qty, selectedStockId, selectedMixerId } }
+      const displayName = typeof prevLine === 'object' ? prevLine?.displayName : null
+      return { ...prev, [id]: { qty, selectedStockId, selectedMixerId, displayName } }
     })
   }
 
@@ -316,10 +331,15 @@ export default function Till({
   const confirmCharge = () => {
     const tenderedValue = parseFloat(cashTendered)
     const hasTendered = cashTendered.trim() !== '' && !Number.isNaN(tenderedValue)
-    const extras = confPayment === 'cash' && hasTendered
-      ? { tenderedAmount: tenderedValue, changeGiven: Math.max(0, tenderedValue - total) }
-      : undefined
+    const noteTrim = tabOrderNotes.trim()
+    const extras = {
+      ...(confPayment === 'cash' && hasTendered
+        ? { tenderedAmount: tenderedValue, changeGiven: Math.max(0, tenderedValue - total) }
+        : {}),
+      ...(noteTrim ? { notes: noteTrim } : {}),
+    }
     processCharge(confPayment, extras)
+    setTabOrderNotes('')
     setChargeModal(false)
     setCashTendered('')
   }
@@ -415,14 +435,10 @@ export default function Till({
       const p = products.find(x => x.id === Number(id))
       if (!p) continue
       const qty = typeof line === 'number' ? line : (line?.qty || 0)
-      const spiritId = typeof line === 'object' ? line?.selectedStockId : null
       const mixerId = typeof line === 'object' ? line?.selectedMixerId : null
-      const spiritName = spiritId ? stockItemById[spiritId]?.name : null
       const mixerLine = mixerId ? mixerChoiceLabel(stockItemById[mixerId]?.name) : null
-      let name = p.name
-      if (spiritName && mixerLine) name = `${p.name} (${spiritName} · ${mixerLine})`
-      else if (spiritName) name = `${p.name} (${spiritName})`
-      else if (mixerLine) name = `${p.name} (${mixerLine})`
+      let name = orderLineLabel(line, p.name)
+      if (mixerLine) name = `${name} (${mixerLine})`
       lines.push({ name, qty, price: Number(p.price) })
     }
     return lines
@@ -622,7 +638,15 @@ export default function Till({
       <div className={styles.orderPanel}>
         <div className={styles.orderHead}>
           <span className={styles.orderTitle}>{orderHeadTitle}</span>
-          <button className={styles.clearBtn} onClick={() => clearOrder(activeOrderKey)}>Clear</button>
+          <button
+            className={styles.clearBtn}
+            onClick={() => {
+              clearOrder(activeOrderKey)
+              setTabOrderNotes('')
+            }}
+          >
+            Clear
+          </button>
         </div>
         <div className={styles.orderItems}>
           {!hasItems ? (
@@ -630,19 +654,16 @@ export default function Till({
           ) : (
             Object.entries(order).map(([id, line]) => {
               const qty = typeof line === 'number' ? line : (line?.qty || 0)
-              const spiritId = typeof line === 'object' ? line?.selectedStockId : null
               const mixerId = typeof line === 'object' ? line?.selectedMixerId : null
               const p = products.find(x => x.id === Number(id))
               if (!p) return null
-              const spiritName = spiritId ? stockItemById[spiritId]?.name : null
               const mixerLine = mixerId ? mixerChoiceLabel(stockItemById[mixerId]?.name) : null
-              const variantSubtitle = spiritName && mixerLine ? `${spiritName} · ${mixerLine}` : null
               return (
                 <div key={id} className={styles.orderItem}>
                   <div>
-                    <div className={styles.oiName}>{p.name}</div>
-                    {variantSubtitle && (
-                      <div className={styles.oiUnit}>{variantSubtitle}</div>
+                    <div className={styles.oiName}>{orderLineLabel(line, p.name)}</div>
+                    {mixerLine && (
+                      <div className={styles.oiUnit}>{mixerLine}</div>
                     )}
                     <div className={styles.oiUnit}>{fmt(p.price)} each</div>
                   </div>
@@ -657,19 +678,17 @@ export default function Till({
             })
           )}
         </div>
-        {isTab && (
-          <div className={styles.orderNoteWrap}>
-            <input
-              className={styles.orderNoteInput}
-              type="text"
-              maxLength={500}
-              placeholder="Add a note for the bar (e.g. no ice)..."
-              value={tabOrderNotes}
-              onChange={(e) => setTabOrderNotes(e.target.value)}
-              aria-label="Note for Bar Display System"
-            />
-          </div>
-        )}
+        <div className={styles.orderNoteWrap}>
+          <input
+            className={styles.orderNoteInput}
+            type="text"
+            maxLength={500}
+            placeholder="Add a note for the bar (e.g. no ice)..."
+            value={tabOrderNotes}
+            onChange={(e) => setTabOrderNotes(e.target.value)}
+            aria-label="Note for Bar Display System"
+          />
+        </div>
         <div className={styles.orderFooter}>
           <div className={styles.totalRow}>
             <span className={styles.totalLabel}>Total</span>
@@ -802,7 +821,13 @@ export default function Till({
                         openMixerChooser(pid, opt.id)
                         return
                       }
-                      setNumpad({ productId: pid, value: '1', selectedStockId: opt.id, selectedMixerId: null })
+                      setNumpad({
+                        productId: pid,
+                        value: '1',
+                        selectedStockId: opt.id,
+                        selectedMixerId: null,
+                        displayName: opt.name,
+                      })
                     }}
                   >
                     <div>{opt.name}</div>
@@ -835,6 +860,7 @@ export default function Till({
                         value: '1',
                         selectedStockId: mixerSheet.spiritStockId,
                         selectedMixerId: opt.id,
+                        displayName: variantDisplayName(mixerSheet.spiritStockId),
                       })
                     }}
                   >

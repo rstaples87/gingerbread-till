@@ -40,6 +40,10 @@ export function mixerBottleDeductionForLine(productId, lineQty, mixerBottleYield
 const getLineQty = (line) => (typeof line === 'number' ? line : (line?.qty || 0))
 const getLineStockId = (line) => (typeof line === 'object' ? line?.selectedStockId : null)
 const getLineMixerId = (line) => (typeof line === 'object' ? line?.selectedMixerId : null)
+const getLineDisplayName = (line) => (typeof line === 'object' ? line?.displayName : null)
+
+/** Panel/receipt label: variant display name when set, else product name */
+export const orderLineLabel = (line, productName) => getLineDisplayName(line) || productName
 
 export const getOrderTotal = (order, products) =>
   Object.entries(order).reduce((sum, [id, line]) => {
@@ -54,11 +58,12 @@ export const orderToItems = (order, products) =>
     if (!p) return null
     return {
       productId: p.id,
-      name: p.name,
+      name: orderLineLabel(line, p.name),
       qty: getLineQty(line),
       price: p.price,
       selectedStockId: getLineStockId(line),
       selectedMixerId: getLineMixerId(line),
+      displayName: getLineDisplayName(line) || undefined,
     }
   }).filter(Boolean)
 

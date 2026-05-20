@@ -34,6 +34,7 @@ export function normaliseTransactionRowLive(row) {
     voidedAt: row.voided_at ? new Date(row.voided_at) : undefined,
     tenderedAmount: row.tendered_amount != null ? Number(row.tendered_amount) : undefined,
     changeGiven: row.change_given != null ? Number(row.change_given) : undefined,
+    sessionDate: row.session_date ?? undefined,
   }
 }
 

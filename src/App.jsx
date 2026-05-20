@@ -11,7 +11,7 @@ import {
 } from './data'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, tabTotal, mixerBottleDeductionForLine } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -23,7 +23,8 @@ import Settings from './components/Settings'
 import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
-import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
+import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue, SYNC_QUEUE_KEY } from './syncQueue'
+import { syncTransactionToSupabaseFireAndForget } from './transactionSync'
 import {
   normaliseTabRowLive,
   normaliseTransactionRowLive,
@@ -280,46 +281,6 @@ async function deleteStockDefinitionFromSupabase(stockKey) {
   if (error) throw error
 }
 
-function syncTransactionToSupabase(tx) {
-  if (!supabase) return
-
-  const time =
-    tx.time instanceof Date ? tx.time.toISOString()
-      : tx.time ?? null
-
-  const voided_at = tx.voidedAt
-    ? (tx.voidedAt instanceof Date ? tx.voidedAt.toISOString() : tx.voidedAt)
-    : null
-
-  /** Keys match Supabase `transactions` columns exactly */
-  const row = {
-    id: tx.id,
-    time,
-    total: tx.total,
-    items: tx.items ?? [],
-    payment: tx.payment ?? null,
-    staff_name: tx.staff ?? null,
-    type: tx.type ?? null,
-    tab_name: tx.tabName ?? null,
-    voided: Boolean(tx.voided),
-    voided_at,
-    tendered_amount: tx.tenderedAmount ?? null,
-    change_given: tx.changeGiven ?? null,
-  }
-
-  supabase
-    .from('transactions')
-    .upsert(row, { onConflict: 'id' })
-    .then(({ error }) => {
-      logSupabaseWrite('transactions', 'upsert', error)
-      if (error) maybeQueueSyncFailure('transaction', row, error)
-    })
-    .catch(err => {
-      logSupabaseWrite('transactions', 'upsert', err)
-      maybeQueueSyncFailure('transaction', row, err)
-    })
-}
-
 /** Columns on public.tabs we may write: id, name, items, opened_at, tab_limit (settled tabs are deleted, not stored). */
 function tabRowForSupabase(tab) {
   const openedAt =
@@ -506,6 +467,8 @@ export default function App() {
   }
   const transactionsSetterRef = useRef(setTransactions)
   transactionsSetterRef.current = setTransactions
+  /** After close till, session txs are local-only until the next close */
+  const sessionClearedRef = useRef(false)
   const tillStockSetterRef = useRef(setStockRaw)
   tillStockSetterRef.current = setStockRaw
   const stockItemsSetterRef = useRef(setStockItemsRaw)
@@ -565,7 +528,7 @@ export default function App() {
       if (cancelled) return
       await loadTabsFromSupabase(setOpenTabs, setOrders, setTabIdCounter)
       if (cancelled) return
-      await loadTransactionsFromSupabase(setTransactions)
+      // Session transactions live in localStorage only — not bulk-loaded from Supabase
       if (cancelled) return
       await loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn)
     })()
@@ -582,10 +545,6 @@ export default function App() {
     const onTabsChange = async () => {
       const { setOpenTabs: setTabs, setOrders: setOrds, setTabIdCounter: setCounter } = tabsLoadSettersRef.current
       await loadTabsFromSupabase(setTabs, setOrds, setCounter, { retryOnEmpty: true })
-    }
-
-    const onTransactionsChange = async () => {
-      await loadTransactionsFromSupabase(transactionsSetterRef.current, { retryOnEmpty: true })
     }
 
     const onTillStockChange = async () => {
@@ -619,13 +578,11 @@ export default function App() {
     }
 
     const tabsChannelName = tabsRealtimeChannelNameRef.current
-    const txChannelName = 'till_realtime_transactions'
     const tillStockChannelName = 'till_realtime_stock'
     const stockItemsChannelName = 'till_realtime_stock_items'
     const staffChannelName = 'till_realtime_staff'
 
     subscribeTable(tabsChannelName, 'tabs', onTabsChange)
-    subscribeTable(txChannelName, 'transactions', onTransactionsChange)
     subscribeTable(tillStockChannelName, 'till_stock', onTillStockChange)
     subscribeTable(stockItemsChannelName, 'stock_items', onStockItemsChange)
     subscribeTable(staffChannelName, 'staff', onStaffChange)
@@ -782,8 +739,25 @@ export default function App() {
   }, [])
 
   const addTransaction = useCallback((tx) => {
-    setTransactions(prev => [tx, ...prev])
-    syncTransactionToSupabase(tx)
+    const withSession = {
+      ...tx,
+      sessionDate: tx.sessionDate ?? localSessionDateString(),
+    }
+    setTransactions(prev => [withSession, ...prev])
+    syncTransactionToSupabaseFireAndForget(withSession)
+  }, [setTransactions])
+
+  const clearSessionTransactions = useCallback(async () => {
+    console.log('[close till] clearSessionTransactions — start')
+    setTransactions([])
+    try {
+      localStorage.removeItem('bt_transactions')
+      localStorage.removeItem(SYNC_QUEUE_KEY)
+    } catch (err) {
+      console.warn('clearSessionTransactions localStorage:', err)
+    }
+    sessionClearedRef.current = true
+    console.log('[close till] clearSessionTransactions — done')
   }, [setTransactions])
 
   const updateOrder = useCallback((key, updater) => {
@@ -836,6 +810,7 @@ export default function App() {
           const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
           const p = products.find(x => x.id === Number(id))
           if (!p) return
+          const itemName = orderLineLabel(line, p.name)
           if (selectedStockId && productVariants[p.id]) {
             const deduct = productVariants[p.id].deduct || 1
             const amount = deduct * qty
@@ -861,7 +836,7 @@ export default function App() {
             )
           })
           if (ex) ex.qty += qty
-          else newItems.push({ name: p.name, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId })
+          else newItems.push({ name: itemName, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId })
         })
         updatedTab = { ...tab, items: newItems }
         return updatedTab
@@ -946,6 +921,7 @@ export default function App() {
         tenderedAmount: extras.tenderedAmount ?? null,
         changeGiven: extras.changeGiven ?? null,
       } : {}),
+      ...(extras.notes ? { notes: extras.notes } : {}),
     }
     addTransaction(tx)
     clearOrder('quick')
@@ -981,7 +957,7 @@ export default function App() {
         voided = { ...tx, voided: true, voidedAt: new Date() }
         return voided
       })
-      if (voided) syncTransactionToSupabase(voided)
+      if (voided) syncTransactionToSupabaseFireAndForget(voided)
       return next
     })
     showToast('Transaction voided — stock restored')
@@ -992,14 +968,21 @@ export default function App() {
       const qty = typeof line === 'number' ? line : (line?.qty || 0)
       const selectedStockId = typeof line === 'object' ? line?.selectedStockId : null
       const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
+      const displayName = typeof line === 'object' ? line?.displayName : null
       const existing = acc[id]
       const existingQty = typeof existing === 'number' ? existing : (existing?.qty || 0)
+      const mergedStockId = selectedStockId || (typeof existing === 'object' ? existing?.selectedStockId : null) || null
+      const mergedDisplayName =
+        displayName
+        || (typeof existing === 'object' ? existing?.displayName : null)
+        || null
       return {
         ...acc,
         [id]: {
           qty: existingQty + qty,
-          selectedStockId: selectedStockId || (typeof existing === 'object' ? existing?.selectedStockId : null) || null,
+          selectedStockId: mergedStockId,
           selectedMixerId: selectedMixerId || (typeof existing === 'object' ? existing?.selectedMixerId : null) || null,
+          displayName: mergedDisplayName,
         },
       }
     }, { ...tabOrder })
@@ -1307,6 +1290,7 @@ export default function App() {
     clockInStaff, clockOutStaff,
     saveShiftLogForToday,
     transactions: hydratedTx, setTransactions,
+    clearSessionTransactions,
     openTabs: hydratedTabs, setOpenTabs,
     orders, updateOrder, clearOrder,
     activeOrderKey, switchOrder,
