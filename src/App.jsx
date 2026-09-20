@@ -40,6 +40,7 @@ import {
   stockDefinitionToRow,
 } from './menuSupabase'
 import { normaliseTabRowLive } from './supabaseRealtimeMerge'
+import { applyStaffOp, withPendingStaffOps } from './staffSupabase'
 import {
   loadTillStockFromSupabase,
   upsertTillStockRowToSupabase,
@@ -58,6 +59,15 @@ function logStaffWrite(operation, error) {
     return
   }
   console.log(`[Supabase write] staff ${operation} ok`)
+}
+
+/** Write a staff change; queue it if the network is down. */
+function sendStaffOp(type, payload) {
+  if (!supabase) return
+  applyStaffOp(type, payload).then(({ error }) => {
+    logStaffWrite(type, error)
+    if (error) maybeQueueSyncFailure(type, payload, error)
+  })
 }
 
 function newStaffUuid() {
@@ -96,10 +106,12 @@ async function loadStaffFromSupabase(setStaff, fallback) {
       error = fb.error
     }
     if (error) throw error
-    const rows = (data || [])
-      .filter(r => r.active !== false)
-      .map(normaliseStaffRow)
-      .filter(Boolean)
+    const rows = withPendingStaffOps(
+      (data || [])
+        .filter(r => r.active !== false)
+        .map(normaliseStaffRow)
+        .filter(Boolean),
+    )
     if (!rows.length) {
       if (fallback != null) setStaff(fallback)
       return false
@@ -619,6 +631,8 @@ export default function App() {
   tillStockSetterRef.current = setStockRaw
   const stockItemsSetterRef = useRef(setStockItemsRaw)
   stockItemsSetterRef.current = setStockItemsRaw
+  const staffRef = useRef(staff)
+  staffRef.current = staff
   const staffSetterRef = useRef(setStaff)
   staffSetterRef.current = setStaff
   const attendanceLoadersRef = useRef({ setAttendanceLog, setCurrentlyIn })
@@ -1368,58 +1382,24 @@ export default function App() {
     const role = 'staff'
     const row = { id, name: cleanName, pin: cleanPin, role, active: true }
     setStaff(prev => [...(Array.isArray(prev) ? prev : []), row])
-    if (supabase) {
-      supabase
-        .from('staff')
-        .insert({ id, name: cleanName, pin: cleanPin, role, active: true })
-        .then(async ({ error }) => {
-          if (!error) {
-            logStaffWrite('insert', null)
-            return
-          }
-          const r2 = await supabase.from('staff').insert({ id, name: cleanName, pin: cleanPin, role })
-          logStaffWrite('insert', r2.error)
-        })
-        .catch(err => logStaffWrite('insert', err))
-    }
+    sendStaffOp('staff_add', row)
   }, [setStaff])
 
   const updateStaffPin = useCallback((name, pin) => {
     const cleanPin = String(pin || '').replace(/\D/g, '').slice(0, 4)
     if (cleanPin.length !== 4) return
-    let rowId = null
+    const rowId = (Array.isArray(staffRef.current) ? staffRef.current : []).find(s => s?.name === name)?.id ?? null
     setStaff(prev =>
-      (Array.isArray(prev) ? prev : []).map(s => {
-        if (s?.name === name) {
-          rowId = s.id
-          return { ...s, pin: cleanPin }
-        }
-        return s
-      }),
+      (Array.isArray(prev) ? prev : []).map(s => (s?.name === name ? { ...s, pin: cleanPin } : s)),
     )
-    if (supabase) {
-      const q = rowId
-        ? supabase.from('staff').update({ pin: cleanPin }).eq('id', rowId)
-        : supabase.from('staff').update({ pin: cleanPin }).eq('name', name)
-      q.then(({ error }) => logStaffWrite('update', error)).catch(err => logStaffWrite('update', err))
-    }
+    sendStaffOp('staff_pin', { id: rowId, name, pin: cleanPin })
   }, [setStaff])
 
   const removeStaffMember = useCallback((name) => {
-    let victimId = null
-    setStaff(prev => {
-      const arr = Array.isArray(prev) ? prev : []
-      const v = arr.find(s => s?.name === name)
-      victimId = v?.id ?? null
-      return arr.filter(s => s?.name !== name)
-    })
+    const victimId = (Array.isArray(staffRef.current) ? staffRef.current : []).find(s => s?.name === name)?.id ?? null
+    setStaff(prev => (Array.isArray(prev) ? prev : []).filter(s => s?.name !== name))
     setCurrentlyIn(prev => (Array.isArray(prev) ? prev : []).filter(row => row.staffName !== name))
-    if (supabase) {
-      const q = victimId
-        ? supabase.from('staff').delete().eq('id', victimId)
-        : supabase.from('staff').delete().eq('name', name)
-      q.then(({ error }) => logStaffWrite('delete', error)).catch(err => logStaffWrite('delete', err))
-    }
+    sendStaffOp('staff_remove', { id: victimId, name })
   }, [setStaff, setCurrentlyIn])
 
   const clockInStaff = useCallback((staffName) => {

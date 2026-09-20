@@ -6,6 +6,7 @@ import {
   applyStockItemDelta,
 } from './tillStockSupabase'
 import { MENU_OP_TYPES, applyMenuOp } from './menuSupabase'
+import { STAFF_OP_TYPES, applyStaffOp } from './staffSupabase'
 import {
   SYNC_QUEUE_KEY,
   readSyncQueue,
@@ -96,6 +97,9 @@ async function flushItems(queue) {
       } else if (MENU_OP_TYPES.has(item.type)) {
         res = await applyMenuOp(item.type, item.payload)
         logSupabaseWrite(item.type, 'write', res?.error)
+      } else if (STAFF_OP_TYPES.has(item.type)) {
+        res = await applyStaffOp(item.type, item.payload)
+        logSupabaseWrite('staff', item.type, res?.error)
       } else if (item.type === 'attendance_save') {
         res = await supabase
           .from('attendance_log')
