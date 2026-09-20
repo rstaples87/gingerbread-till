@@ -24,7 +24,7 @@ import Settings from './components/Settings'
 import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
-import { readSyncQueue, readPendingEodReportRows, readPendingAttendanceRows, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
+import { readSyncQueue, readPendingEodReportRows, readPendingAttendanceRows, readPendingAttendanceSaveRanges, maybeQueueSyncFailure, flushSyncQueue, enqueueSyncQueueItem, isLikelyNetworkFailure } from './syncQueue'
 import {
   syncTransactionToSupabaseFireAndForget,
   fetchTodayTransactionsFromSupabase,
@@ -187,6 +187,15 @@ async function loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn) {
     const serverIds = new Set(rows.map(r => r.id))
     for (const p of readPendingAttendanceRows()) {
       if (!serverIds.has(p.id)) rows.push(normaliseAttendanceRow(p))
+    }
+    // Re-apply "Save shift log" days still waiting to sync.
+    for (const range of readPendingAttendanceSaveRanges()) {
+      const start = new Date(range.start).getTime()
+      const end = new Date(range.end).getTime()
+      for (const r of rows) {
+        const t = new Date(r.time).getTime()
+        if (t >= start && t < end) r.saved = true
+      }
     }
     rows.sort((x, y) => new Date(x.time) - new Date(y.time))
     setAttendanceLog(rows)
@@ -896,9 +905,11 @@ export default function App() {
     const tryFlush = async () => {
       if (!readSyncQueue().length) return
       const hadEodReport = readPendingEodReportRows().length > 0
-      const hadAttendance = readPendingAttendanceRows().length > 0
+      const pendingAttendance = () =>
+        readPendingAttendanceRows().length + readPendingAttendanceSaveRanges().length
+      const hadAttendance = pendingAttendance() > 0
       await flushSyncQueue()
-      if (hadAttendance && readPendingAttendanceRows().length === 0) {
+      if (hadAttendance && pendingAttendance() === 0) {
         const { setAttendanceLog: setLog, setCurrentlyIn: setIn } = attendanceLoadersRef.current
         await loadAttendanceFromSupabase(setLog, setIn)
       }
@@ -1461,14 +1472,31 @@ export default function App() {
       return
     }
     if (supabase) {
-      const { error } = await supabase
-        .from('attendance_log')
-        .update({ saved: true })
-        .gte('time', todayStarts.start.toISOString())
-        .lt('time', todayStarts.end.toISOString())
+      const range = { start: todayStarts.start.toISOString(), end: todayStarts.end.toISOString() }
+      let error
+      try {
+        ;({ error } = await supabase
+          .from('attendance_log')
+          .update({ saved: true })
+          .gte('time', range.start)
+          .lt('time', range.end))
+      } catch (err) {
+        error = err
+      }
       logSupabaseWrite('attendance_log', 'update', error)
       if (error) {
-        showToast('Could not save shift log')
+        if (!isLikelyNetworkFailure(error)) {
+          showToast('Could not save shift log')
+          return
+        }
+        // Offline: mark saved here now, and apply it on the server when the connection returns.
+        enqueueSyncQueueItem('attendance_save', range)
+        setAttendanceLog(prev =>
+          prev.map(e =>
+            isSameLocalCalendarDay(new Date(e.time), new Date()) ? { ...e, saved: true } : e,
+          ),
+        )
+        showToast('Offline — shift log saved here, will sync when back online')
         return
       }
       await loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn)

@@ -21,6 +21,11 @@ export function readPendingEodReportRows() {
   return readSyncQueue().filter(i => i?.type === 'eod_report' && i.payload).map(i => i.payload)
 }
 
+/** "Save shift log" day ranges still waiting to be applied on the server. */
+export function readPendingAttendanceSaveRanges() {
+  return readSyncQueue().filter(i => i?.type === 'attendance_save' && i.payload).map(i => i.payload)
+}
+
 /** attendance_log rows still waiting to upload. */
 export function readPendingAttendanceRows() {
   return readSyncQueue().filter(i => i?.type === 'attendance' && i.payload).map(i => i.payload)
@@ -91,6 +96,13 @@ async function flushItems(queue) {
       } else if (MENU_OP_TYPES.has(item.type)) {
         res = await applyMenuOp(item.type, item.payload)
         logSupabaseWrite(item.type, 'write', res?.error)
+      } else if (item.type === 'attendance_save') {
+        res = await supabase
+          .from('attendance_log')
+          .update({ saved: true })
+          .gte('time', item.payload.start)
+          .lt('time', item.payload.end)
+        logSupabaseWrite('attendance_log', 'update', res?.error)
       } else if (item.type === 'attendance') {
         res = await supabase.from('attendance_log').upsert(item.payload, { onConflict: 'id' })
         logSupabaseWrite('attendance_log', 'upsert', res?.error)
