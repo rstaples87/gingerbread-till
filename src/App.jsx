@@ -32,6 +32,13 @@ import {
   mergeTransactionsDeduped,
 } from './transactionSync'
 import { loadEodReportsWithFallback } from './eodReportsSupabase'
+import {
+  applyMenuOp,
+  fetchMenuFromSupabase,
+  seedMenuToSupabase,
+  productToRow,
+  stockDefinitionToRow,
+} from './menuSupabase'
 import { normaliseTabRowLive } from './supabaseRealtimeMerge'
 import {
   loadTillStockFromSupabase,
@@ -304,7 +311,7 @@ async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
   }
 }
 
-/** Bootstrap: stock take qty from Supabase (definitions stay in localStorage only). */
+/** Bootstrap: stock take qty from Supabase (definitions come from the shared menu, see loadMenuFromSupabase). */
 async function loadStockFromSupabase(setStockItemsRaw) {
   return loadStockItemsFromSupabase(setStockItemsRaw)
 }
@@ -312,19 +319,53 @@ async function loadStockFromSupabase(setStockItemsRaw) {
 const onTillStockUpsertQueueable = (row, err) =>
   maybeQueueSyncFailure('till_stock', row, err)
 
-async function upsertStockDefinitionToSupabase(item, qty) {
+/** Write a shared-menu change (product, variant, stock definition, category); queue it if the network is down. */
+function sendMenuOp(type, payload) {
   if (!supabase) return
-  const row = { stock_key: item.id, qty: Number(qty ?? item.stock ?? 0) }
-  const { error } = await supabase.from('stock_items').upsert(row, { onConflict: 'stock_key' })
-  logSupabaseWrite('stock_items', 'upsert', error)
-  if (error) throw error
+  applyMenuOp(type, payload).then(({ error }) => {
+    logSupabaseWrite(type, 'write', error)
+    if (error) maybeQueueSyncFailure(type, payload, error)
+  })
 }
 
-async function deleteStockDefinitionFromSupabase(stockKey) {
-  if (!supabase) return
-  const { error } = await supabase.from('stock_items').delete().eq('stock_key', stockKey)
-  logSupabaseWrite('stock_items', 'delete', error)
-  if (error) throw error
+/**
+ * Load the shared menu from Supabase into local state (local copy is the offline fallback).
+ * With `seed`, an empty shared menu is filled once from this device's local menu.
+ */
+async function loadMenuFromSupabase(setters, getLocal, { seed = false } = {}) {
+  const menu = await fetchMenuFromSupabase()
+  if (!menu) return false
+  const local = getLocal()
+  if (seed) {
+    const seedProducts = menu.products.length === 0 && local.products.length > 0
+    const seedStock = menu.stockDefinitions.length === 0 && local.stockDefinitions.length > 0
+    if (seedProducts || seedStock) {
+      await seedMenuToSupabase(
+        {
+          products: local.products,
+          variants: local.productVariants,
+          stockDefinitions: local.stockDefinitions,
+          categories: local.categoryState,
+        },
+        { seedProducts, seedStock },
+      )
+    }
+    // Keep this device's menu for whichever parts it just uploaded; adopt the server's for the rest.
+    if (!seedProducts) {
+      setters.setProducts(menu.products)
+      setters.setProductVariants(menu.variants)
+      setters.setCategoryState(menu.categories)
+    }
+    if (!seedStock) setters.setStockDefinitions(menu.stockDefinitions)
+    return true
+  }
+  if (menu.products.length) {
+    setters.setProducts(menu.products)
+    setters.setProductVariants(menu.variants)
+    setters.setCategoryState(menu.categories)
+  }
+  if (menu.stockDefinitions.length) setters.setStockDefinitions(menu.stockDefinitions)
+  return true
 }
 
 /** Columns on public.tabs we may write: id, name, items, opened_at, tab_limit (settled tabs are deleted, not stored). */
@@ -548,6 +589,10 @@ export default function App() {
   const [toast, setToast] = useState({ msg: '', visible: false })
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const [eodReports, setEodReports] = useState([])
+  const menuSettersRef = useRef({})
+  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState }
+  const menuLocalRef = useRef({})
+  menuLocalRef.current = { products, productVariants, stockDefinitions, categoryState }
   const tabsLoadSettersRef = useRef({ setOpenTabs, setOrders, setTabIdCounter })
   tabsLoadSettersRef.current = { setOpenTabs, setOrders, setTabIdCounter }
   const tabsRealtimeChannelNameRef = useRef(null)
@@ -620,6 +665,8 @@ export default function App() {
     ;(async () => {
       await seedSupabase()
       if (cancelled) return
+      await loadMenuFromSupabase(menuSettersRef.current, () => menuLocalRef.current, { seed: true })
+      if (cancelled) return
       await bootstrapSharedDataFromSupabase({
         staffFallback,
         stockItemsFallback,
@@ -648,6 +695,7 @@ export default function App() {
   useEffect(() => {
     const refreshFromSupabaseOnFocus = () => {
       if (!supabase) return
+      loadMenuFromSupabase(menuSettersRef.current, () => menuLocalRef.current)
       loadTillStockFromSupabase(tillStockSetterRef.current, { retryOnEmpty: true })
       loadStockItemsFromSupabase(stockItemsSetterRef.current, { retryOnEmpty: true })
       if (!sessionClearedRef.current) {
@@ -708,6 +756,30 @@ export default function App() {
     subscribeTable(tabsChannelName, 'tabs', onTabsChange)
     subscribeTable(tillStockChannelName, 'till_stock', onTillStockChange)
     subscribeTable(stockItemsChannelName, 'stock_items', onStockItemsChange)
+
+    // Shared menu: any change refetches the whole menu (never merged from the payload).
+    const onMenuChange = () => {
+      loadMenuFromSupabase(menuSettersRef.current, () => menuLocalRef.current)
+    }
+    subscribeTable('till_realtime_menu_products', 'menu_products', onMenuChange)
+    subscribeTable('till_realtime_menu_categories', 'menu_categories', onMenuChange)
+    // stock_items also changes on every sale (qty), so only refetch the menu when a definition changed.
+    const definitionChanged = (payload) => {
+      if (payload.eventType !== 'UPDATE') return true
+      const a = payload.old ?? {}
+      const b = payload.new ?? {}
+      return ['name', 'category', 'unit', 'display_unit', 'data'].some(
+        k => JSON.stringify(a[k] ?? null) !== JSON.stringify(b[k] ?? null),
+      )
+    }
+    const menuStockChannel = supabase.channel('till_realtime_stock_definitions')
+    for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+      menuStockChannel.on('postgres_changes', { event, schema: 'public', table: 'stock_items' }, (payload) => {
+        if (definitionChanged(payload)) onMenuChange()
+      })
+    }
+    menuStockChannel.subscribe()
+    channels.push(menuStockChannel)
     subscribeTable(staffChannelName, 'staff', onStaffChange)
 
     const onAttendanceChange = async () => {
@@ -1186,8 +1258,8 @@ export default function App() {
       return next
     })
     setStock(prev => ({ ...prev, [cleanProduct.id]: prev[cleanProduct.id] ?? cleanProduct.stock ?? 0 }))
-    console.warn('[Supabase] products table does not exist — product saved locally only')
-    showToast('Product saved (local only)')
+    sendMenuOp('menu_product', productToRow(cleanProduct, variant))
+    showToast('Product saved')
   }, [setProducts, setProductVariants, setStock, showToast])
 
   const deleteProduct = useCallback((productId) => {
@@ -1203,8 +1275,8 @@ export default function App() {
       delete next[id]
       return next
     })
-    console.warn('[Supabase] products table does not exist — product deleted locally only')
-    showToast('Product deleted (local only)')
+    sendMenuOp('menu_product_delete', { id })
+    showToast('Product deleted')
   }, [setProducts, setProductVariants, setStock, showToast])
 
   const saveStockDefinition = useCallback((item) => {
@@ -1224,8 +1296,7 @@ export default function App() {
     })
     const qty = stockItems?.[cleanItem.id] ?? cleanItem.stock ?? 0
     setStockItems(prev => ({ ...prev, [cleanItem.id]: prev[cleanItem.id] ?? qty }))
-    upsertStockDefinitionToSupabase(cleanItem, qty)
-      .catch(err => console.warn('saveStockDefinition failed:', err?.message || err))
+    sendMenuOp('stock_definition', stockDefinitionToRow(cleanItem))
     showToast('Stock item saved')
   }, [setStockDefinitions, setStockItems, stockItems, showToast])
 
@@ -1255,10 +1326,9 @@ export default function App() {
       }
     }
     setProductVariants(nextVariants)
-    deleteStockDefinitionFromSupabase(stockKey)
-      .catch(err => console.warn('deleteStockDefinition failed:', err?.message || err))
-    if (changedVariants.length) {
-      console.warn('[Supabase] product_variants table does not exist — variant links updated locally only')
+    sendMenuOp('stock_definition_delete', { stock_key: String(stockKey) })
+    for (const [productId, variant] of changedVariants) {
+      sendMenuOp('menu_variant', { id: Number(productId), variant })
     }
     showToast('Stock item deleted')
   }, [productVariants, setStockDefinitions, setStockItems, setProductVariants, showToast])
@@ -1274,8 +1344,8 @@ export default function App() {
       till: type === 'till' ? uniqueNonEmpty([...(prev?.till || []), name]) : (prev?.till || []),
       stock: type === 'stock' ? uniqueNonEmpty([...(prev?.stock || []), name]) : (prev?.stock || []),
     }))
-    console.warn('[Supabase] categories table does not exist — category saved locally only')
-    showToast('Category added (local only)')
+    sendMenuOp('menu_category', { kind: type, name })
+    showToast('Category added')
     return name
   }, [setCategoryState, showToast, stockCategories, tillCategories])
 

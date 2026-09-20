@@ -5,6 +5,7 @@ import {
   applyTillStockDelta,
   applyStockItemDelta,
 } from './tillStockSupabase'
+import { MENU_OP_TYPES, applyMenuOp } from './menuSupabase'
 import {
   SYNC_QUEUE_KEY,
   readSyncQueue,
@@ -87,6 +88,9 @@ async function flushItems(queue) {
       } else if (item.type === 'stock_delta') {
         res = await applyStockItemDelta(item.payload)
         logSupabaseWrite('stock_items', 'adjust', res?.error)
+      } else if (MENU_OP_TYPES.has(item.type)) {
+        res = await applyMenuOp(item.type, item.payload)
+        logSupabaseWrite(item.type, 'write', res?.error)
       } else if (item.type === 'attendance') {
         res = await supabase.from('attendance_log').upsert(item.payload, { onConflict: 'id' })
         logSupabaseWrite('attendance_log', 'upsert', res?.error)
