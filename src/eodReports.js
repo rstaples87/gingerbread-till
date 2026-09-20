@@ -1,3 +1,5 @@
+import { localSessionDateString } from './utils'
+
 export const EOD_REPORTS_STORAGE_KEY = 'bt_eod_reports'
 export const MAX_LOCAL_EOD_REPORTS = 5
 
@@ -30,7 +32,7 @@ export function buildEodReportData({
   voidedTx,
   transactions,
 }) {
-  const session_date = reportDate ?? new Date().toISOString().split('T')[0]
+  const session_date = reportDate ?? localSessionDateString()
 
   return {
     generatedAt,

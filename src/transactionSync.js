@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import { logSupabaseWrite } from './supabaseWriteLog'
 import { maybeQueueSyncFailure } from './syncQueue'
 import { normaliseTransactionRowLive } from './supabaseRealtimeMerge'
+import { localSessionDateString } from './utils'
 
 /** Row shape for transactions table — only columns known to exist (upsert + close-till insert). */
 export function transactionRowForSupabase(tx) {
@@ -14,7 +15,7 @@ export function transactionRowForSupabase(tx) {
     : null
 
   const session_date =
-    tx.sessionDate ?? tx.session_date ?? new Date().toISOString().split('T')[0]
+    tx.sessionDate ?? tx.session_date ?? localSessionDateString()
 
   const row = {
     id: tx.id,
@@ -72,9 +73,9 @@ export async function syncTransactionToSupabase(tx) {
   }
 }
 
-/** UTC calendar date YYYY-MM-DD — must match session_date written on insert. */
+/** Trading-day date YYYY-MM-DD — same helper that stamps session_date on insert. */
 export function todaySessionDateForSupabase() {
-  return new Date().toISOString().split('T')[0]
+  return localSessionDateString()
 }
 
 /** Today's session transactions for the Sales view. */

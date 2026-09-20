@@ -1,8 +1,14 @@
 export const fmt = n => '£' + Number(n).toFixed(2)
 
-/** Local calendar date YYYY-MM-DD for bar_orders.session_date */
-export function localSessionDateString() {
-  const d = new Date()
+/** Trading day rolls over at 06:00 local, so a night running past midnight stays one session. */
+export const SESSION_ROLLOVER_HOUR = 6
+
+/**
+ * Trading-day date YYYY-MM-DD (local time, 06:00 rollover). Single source of truth for
+ * transactions, bar_orders and EOD reports' session_date, and for the queries that read them.
+ */
+export function localSessionDateString(now = new Date()) {
+  const d = new Date(now.getTime() - SESSION_ROLLOVER_HOUR * 3600 * 1000)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
