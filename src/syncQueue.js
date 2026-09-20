@@ -48,10 +48,21 @@ export function maybeQueueSyncFailure(type, payload, err) {
   enqueueSyncQueueItem(type, payload)
 }
 
+let flushInFlight = false
+
 export async function flushSyncQueue() {
-  if (!supabase) return
+  if (!supabase || flushInFlight) return
   const queue = readSyncQueue()
   if (!queue.length) return
+  flushInFlight = true
+  try {
+    await flushItems(queue)
+  } finally {
+    flushInFlight = false
+  }
+}
+
+async function flushItems(queue) {
   const remaining = []
   for (const item of queue) {
     try {
@@ -83,5 +94,7 @@ export async function flushSyncQueue() {
       remaining.push(item)
     }
   }
-  writeSyncQueue(remaining)
+  // Keep anything queued while this flush was running (appended after `queue` was read).
+  const addedDuringFlush = readSyncQueue().slice(queue.length)
+  writeSyncQueue([...remaining, ...addedDuringFlush])
 }

@@ -24,7 +24,7 @@ import Settings from './components/Settings'
 import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
-import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue, SYNC_QUEUE_KEY } from './syncQueue'
+import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
 import {
   syncTransactionToSupabaseFireAndForget,
   fetchTodayTransactionsFromSupabase,
@@ -787,17 +787,23 @@ export default function App() {
     return () => window.removeEventListener('offline', onOffline)
   }, [showToast])
 
+  // Replay queued offline writes on startup, when the connection returns, on focus, and every minute.
+  // The 'online' event alone isn't enough: it never fires if the app starts already online.
   useEffect(() => {
-    const onOnline = async () => {
-      const pending = readSyncQueue().length
+    const tryFlush = async () => {
+      if (!readSyncQueue().length) return
       await flushSyncQueue()
-      const after = readSyncQueue().length
-      if (pending > 0 && after === 0) {
-        showToast('Back online — syncing saved data')
-      }
+      if (readSyncQueue().length === 0) showToast('Back online — saved data synced')
     }
-    window.addEventListener('online', onOnline)
-    return () => window.removeEventListener('online', onOnline)
+    void tryFlush()
+    const timer = setInterval(tryFlush, 60_000)
+    window.addEventListener('online', tryFlush)
+    window.addEventListener('focus', tryFlush)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('online', tryFlush)
+      window.removeEventListener('focus', tryFlush)
+    }
   }, [showToast])
 
   /** Stock view “Till products” ± — writes till_stock only (product_id, qty). */
@@ -845,7 +851,7 @@ export default function App() {
     setTransactions([])
     try {
       localStorage.removeItem('bt_transactions')
-      localStorage.removeItem(SYNC_QUEUE_KEY)
+      // bt_sync_queue is kept: unsynced sales must survive close-out and replay later.
     } catch (err) {
       console.warn('clearSessionTransactions localStorage:', err)
     }
