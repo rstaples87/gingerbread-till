@@ -82,8 +82,12 @@ async function flushItems(queue) {
         res = await upsertTillStockFromQueuePayload(item.payload)
         logSupabaseWrite('till_stock', 'upsert', res?.error)
       } else if (item.type === 'bar_order') {
-        res = await supabase.from('bar_orders').insert(item.payload)
-        logSupabaseWrite('bar_orders', 'insert', res?.error)
+        res = await supabase.from('bar_orders').upsert(item.payload, { onConflict: 'id' })
+        if (res?.error && item.payload.notes != null && !isLikelyNetworkFailure(res.error)) {
+          const { notes: _n, ...rest } = item.payload
+          res = await supabase.from('bar_orders').upsert(rest, { onConflict: 'id' })
+        }
+        logSupabaseWrite('bar_orders', 'upsert', res?.error)
       } else if (item.type === 'eod_report') {
         res = await supabase.from('eod_reports').upsert(item.payload, { onConflict: 'id' })
         logSupabaseWrite('eod_reports', 'upsert', res?.error)

@@ -3,6 +3,7 @@ import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
 import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString } from '../utils'
 import { supabase } from '../supabase'
 import { logSupabaseWrite } from '../supabaseWriteLog'
+import { enqueueSyncQueueItem, isLikelyNetworkFailure } from '../syncQueue'
 import styles from './Till.module.css'
 
 function getPortionLabel(product) {
@@ -461,27 +462,43 @@ export default function Till({
     }
   }
 
+  /** Returns 'sent', 'queued' (offline — replayed by the sync queue) or false. */
   const insertBarOrderPayload = async (payload) => {
     if (!payload || !supabase) {
       showToast('Could not send to BDS')
       return false
     }
+    // Client-side id + sent_at make the insert idempotent, so a queued replay can't duplicate the order.
+    const row = {
+      ...payload,
+      id: payload.id ?? crypto.randomUUID(),
+      sent_at: payload.sent_at ?? new Date().toISOString(),
+    }
     try {
-      let { error } = await supabase.from('bar_orders').insert(payload)
-      if (error && payload.notes != null) {
-        const { notes: _n, ...rest } = payload
-        const second = await supabase.from('bar_orders').insert(rest)
+      let { error } = await supabase.from('bar_orders').upsert(row, { onConflict: 'id' })
+      if (error && !isLikelyNetworkFailure(error) && row.notes != null) {
+        const { notes: _n, ...rest } = row
+        const second = await supabase.from('bar_orders').upsert(rest, { onConflict: 'id' })
         error = second.error
       }
       logSupabaseWrite('bar_orders', 'insert', error)
       if (error) throw error
-      return true
+      return 'sent'
     } catch (e) {
       console.warn(e)
+      if (isLikelyNetworkFailure(e)) {
+        enqueueSyncQueueItem('bar_order', row)
+        return 'queued'
+      }
       showToast('Could not send to BDS')
       return false
     }
   }
+
+  const bdsToast = (result) =>
+    showToast(result === 'queued'
+      ? 'Offline — order will reach the bar screen when back online'
+      : 'Order sent to BDS')
 
   const handleAddItemsClick = () => {
     if (!hasItems || wouldExceedTabLimit || !isTab || !activeTab) return
@@ -499,7 +516,7 @@ export default function Till({
     setPostAddBdsPrompt(null)
     if (!payload) return
     const ok = await insertBarOrderPayload(payload)
-    if (ok) showToast('Order sent to BDS')
+    if (ok) bdsToast(ok)
   }
 
   const handleSendToBar = async () => {
@@ -509,7 +526,7 @@ export default function Till({
     const ok = await insertBarOrderPayload(payload)
     if (!ok) return
     setTabOrderNotes('')
-    showToast('Order sent to BDS')
+    bdsToast(ok)
     setPostSendBdsPrompt(true)
   }
 
