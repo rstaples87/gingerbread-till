@@ -27,7 +27,21 @@ function formatSentTime(sentAt) {
 
 export default function BarView({ showToast }) {
   const [rows, setRows] = useState([])
-  const [sessionDate] = useState(() => localSessionDateString())
+  const [sessionDate, setSessionDate] = useState(() => localSessionDateString())
+
+  // The display can stay open all night and past the 06:00 trading-day rollover: keep the date current
+  // (a new date re-runs the load and realtime subscription below, so old orders drop off).
+  useEffect(() => {
+    const refreshSessionDate = () => setSessionDate(localSessionDateString())
+    const timer = setInterval(refreshSessionDate, 60_000)
+    window.addEventListener('focus', refreshSessionDate)
+    document.addEventListener('visibilitychange', refreshSessionDate)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', refreshSessionDate)
+      document.removeEventListener('visibilitychange', refreshSessionDate)
+    }
+  }, [])
 
   const loadOrders = useCallback(async () => {
     if (!supabase) return
