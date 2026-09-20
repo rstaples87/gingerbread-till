@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { logSupabaseWrite } from './supabaseWriteLog'
+import { maybeQueueSyncFailure, readPendingEodReportRows } from './syncQueue'
 import {
   EOD_REPORTS_STORAGE_KEY,
   MAX_LOCAL_EOD_REPORTS,
@@ -47,21 +48,48 @@ export async function fetchRecentEodReportsFromSupabase(limit = MAX_LOCAL_EOD_RE
   return (data ?? []).map(normaliseEodReportRow).filter(Boolean)
 }
 
-export async function saveEodReportToSupabase(entry) {
-  if (!supabase) {
-    return { error: new Error('Supabase not configured') }
-  }
-
-  const row = {
+export function eodRowForSupabase(entry) {
+  return {
     id: entry.id,
     created_at: entry.createdAt ?? new Date().toISOString(),
     session_date: entry.session_date ?? entry.reportDate,
     report_data: entry.reportData,
   }
+}
 
-  const { error } = await supabase.from('eod_reports').upsert(row, { onConflict: 'id' })
-  logSupabaseWrite('eod_reports', 'upsert', error)
-  return { error: error ?? null }
+/** Upsert an EOD report; on a network failure it's queued and retried by the sync queue. */
+export async function saveEodReportToSupabase(entry) {
+  const row = eodRowForSupabase(entry)
+  if (!supabase) {
+    const err = new Error('Supabase not configured')
+    maybeQueueSyncFailure('eod_report', row, err)
+    return { error: err }
+  }
+
+  try {
+    const { error } = await supabase.from('eod_reports').upsert(row, { onConflict: 'id' })
+    logSupabaseWrite('eod_reports', 'upsert', error)
+    if (error) maybeQueueSyncFailure('eod_report', row, error)
+    return { error: error ?? null }
+  } catch (err) {
+    logSupabaseWrite('eod_reports', 'upsert', err)
+    maybeQueueSyncFailure('eod_report', row, err)
+    return { error: err }
+  }
+}
+
+/** Remote reports plus any still-queued local ones, newest first, capped. */
+function mergeWithPendingEodReports(remote) {
+  const byId = new Map()
+  for (const r of remote) byId.set(r.id, r)
+  for (const row of readPendingEodReportRows()) {
+    if (!byId.has(row.id)) byId.set(row.id, normaliseEodReportRow(row))
+  }
+  return Array.from(byId.values())
+    .sort((a, b) =>
+      String(b.session_date ?? '').localeCompare(String(a.session_date ?? ''))
+      || String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+    .slice(0, MAX_LOCAL_EOD_REPORTS)
 }
 
 function cacheEodReportsLocally(reports) {
@@ -76,8 +104,9 @@ function cacheEodReportsLocally(reports) {
 export async function loadEodReportsWithFallback() {
   const remote = await fetchRecentEodReportsFromSupabase()
   if (remote?.length) {
-    cacheEodReportsLocally(remote)
-    return remote
+    const merged = mergeWithPendingEodReports(remote)
+    cacheEodReportsLocally(merged)
+    return merged
   }
   return readSavedEodReportsFromStorage()
 }
@@ -95,8 +124,9 @@ export async function persistEodReportEntryRemote(existing, entry) {
 
   const remote = await fetchRecentEodReportsFromSupabase()
   if (remote?.length) {
-    cacheEodReportsLocally(remote)
-    return remote
+    const merged = mergeWithPendingEodReports(remote)
+    cacheEodReportsLocally(merged)
+    return merged
   }
   return localNext
 }

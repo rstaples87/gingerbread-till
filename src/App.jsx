@@ -24,7 +24,7 @@ import Settings from './components/Settings'
 import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
-import { readSyncQueue, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
+import { readSyncQueue, readPendingEodReportRows, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
 import {
   syncTransactionToSupabaseFireAndForget,
   fetchTodayTransactionsFromSupabase,
@@ -792,7 +792,11 @@ export default function App() {
   useEffect(() => {
     const tryFlush = async () => {
       if (!readSyncQueue().length) return
+      const hadEodReport = readPendingEodReportRows().length > 0
       await flushSyncQueue()
+      if (hadEodReport && readPendingEodReportRows().length === 0) {
+        setEodReports(await loadEodReportsWithFallback())
+      }
       if (readSyncQueue().length === 0) showToast('Back online — saved data synced')
     }
     void tryFlush()

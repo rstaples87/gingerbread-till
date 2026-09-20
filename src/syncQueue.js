@@ -27,6 +27,11 @@ export function enqueueSyncQueueItem(type, payload) {
   writeSyncQueue(queue)
 }
 
+/** eod_reports rows still waiting to upload (so the UI can keep showing them). */
+export function readPendingEodReportRows() {
+  return readSyncQueue().filter(i => i?.type === 'eod_report' && i.payload).map(i => i.payload)
+}
+
 export function isLikelyNetworkFailure(err) {
   if (!err) return false
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
@@ -79,6 +84,9 @@ async function flushItems(queue) {
       } else if (item.type === 'bar_order') {
         res = await supabase.from('bar_orders').insert(item.payload)
         logSupabaseWrite('bar_orders', 'insert', res?.error)
+      } else if (item.type === 'eod_report') {
+        res = await supabase.from('eod_reports').upsert(item.payload, { onConflict: 'id' })
+        logSupabaseWrite('eod_reports', 'upsert', res?.error)
       } else if (item.type === 'tabs') {
         res = await supabase.from('tabs').upsert(item.payload, { onConflict: 'id' })
         logSupabaseWrite('tabs', 'upsert', res?.error)
