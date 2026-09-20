@@ -18,6 +18,7 @@ import Till from './components/Till'
 import TabsView from './components/TabsView'
 import Stock from './components/Stock'
 import StaffLog from './components/StaffLog'
+import UpdateBanner from './components/UpdateBanner'
 import Sales from './components/Sales'
 import Settings from './components/Settings'
 import BarView from './components/BarView'
@@ -1432,6 +1433,7 @@ export default function App() {
         />
       )}
       <Toast msg={toast.msg} visible={toast.visible} />
+      <UpdateBanner />
     </>
   )
 }
