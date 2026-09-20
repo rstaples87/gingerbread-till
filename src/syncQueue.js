@@ -45,8 +45,15 @@ export function isLikelyNetworkFailure(err) {
   return false
 }
 
+/** Expired/invalid login token: the write should wait and retry after the token refreshes, not be dropped. */
+export function isAuthTokenFailure(err) {
+  if (!err) return false
+  const msg = String(err.message ?? err).toLowerCase()
+  return err.code === 'PGRST301' || msg.includes('jwt expired') || msg.includes('invalid jwt')
+}
+
 export function maybeQueueSyncFailure(type, payload, err) {
-  if (!isLikelyNetworkFailure(err)) {
+  if (!isLikelyNetworkFailure(err) && !isAuthTokenFailure(err)) {
     console.warn('Sync failed (not queued):', err?.message ?? err)
     return
   }
@@ -61,6 +68,8 @@ export async function flushSyncQueue() {
   if (!queue.length) return
   flushInFlight = true
   try {
+    // Renew the login token first if it expired while offline (harmless if it can't yet).
+    try { await supabase.auth.getSession() } catch {}
     await flushItems(queue)
   } finally {
     flushInFlight = false

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import styles from './StaffOverlay.module.css'
-import { ADMIN_PIN } from '../data'
 
-function PinDots({ pinLength }) {
+export function PinDots({ pinLength }) {
   return (
     <div className={styles.dots} aria-label="PIN entry">
       {Array.from({ length: 4 }).map((_, i) => (
@@ -16,7 +15,7 @@ function PinDots({ pinLength }) {
   )
 }
 
-function Numpad({ onDigit, onClear, onDelete, disabled }) {
+export function Numpad({ onDigit, onClear, onDelete, disabled }) {
   const Btn = ({ children, onClick, variant }) => (
     <button
       className={`${styles.npBtn} ${variant ? styles[variant] : ''}`}
@@ -45,7 +44,7 @@ function Numpad({ onDigit, onClear, onDelete, disabled }) {
   )
 }
 
-export default function StaffOverlay({ onSelect, onClose }) {
+export default function StaffOverlay({ onSelect, onClose, verifyManagerPin }) {
   const [step, setStep] = useState('pick') // pick | pin
   const [pinFor, setPinFor] = useState(null) // { type: 'admin' }
   const [pin, setPin] = useState('')
@@ -62,7 +61,7 @@ export default function StaffOverlay({ onSelect, onClose }) {
     }
 
     if (pinFor?.type === 'admin') {
-      if (submitted === ADMIN_PIN) {
+      if (verifyManagerPin(submitted)) {
         setError('')
         setPin('')
         onSelect('Manager')
@@ -70,7 +69,7 @@ export default function StaffOverlay({ onSelect, onClose }) {
       } else doFail()
       return
     }
-  }, [pin, pinFor, step, onClose, onSelect])
+  }, [pin, pinFor, step, onClose, onSelect, verifyManagerPin])
 
   const startPinForAdmin = () => {
     setPinFor({ type: 'admin' })

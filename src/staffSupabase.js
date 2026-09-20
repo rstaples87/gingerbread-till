@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import { readSyncQueue } from './syncQueueStore'
 
-export const STAFF_OP_TYPES = new Set(['staff_add', 'staff_pin', 'staff_remove'])
+export const STAFF_OP_TYPES = new Set(['staff_add', 'staff_pin', 'staff_role', 'staff_remove'])
 
 function isNetworkError(err) {
   const msg = String(err?.message ?? err ?? '').toLowerCase()
@@ -12,6 +12,7 @@ function isNetworkError(err) {
  * Apply one staff write (also used to replay queued writes). Resolves { error }, never throws.
  *  staff_add    { id, name, pin, role, active }  — upsert by id, so a replay can't duplicate the person
  *  staff_pin    { id?, name, pin }
+ *  staff_role   { id?, name, role }  (role is 'staff' or 'manager')
  *  staff_remove { id?, name }
  */
 export async function applyStaffOp(type, payload) {
@@ -28,6 +29,11 @@ export async function applyStaffOp(type, payload) {
     }
     if (type === 'staff_pin') {
       const q = supabase.from('staff').update({ pin: payload.pin })
+      const res = payload.id ? await q.eq('id', payload.id) : await q.eq('name', payload.name)
+      return { error: res.error ?? null }
+    }
+    if (type === 'staff_role') {
+      const q = supabase.from('staff').update({ role: payload.role })
       const res = payload.id ? await q.eq('id', payload.id) : await q.eq('name', payload.name)
       return { error: res.error ?? null }
     }
@@ -55,6 +61,8 @@ export function withPendingStaffOps(rows) {
       }
     } else if (item.type === 'staff_pin') {
       out = out.map(s => (same(s) ? { ...s, pin: p.pin } : s))
+    } else if (item.type === 'staff_role') {
+      out = out.map(s => (same(s) ? { ...s, role: p.role } : s))
     } else if (item.type === 'staff_remove') {
       out = out.filter(s => !same(s))
     }

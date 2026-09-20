@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import ManagerGate from './ManagerGate'
 import styles from './StaffLog.module.css'
 
 function onlyDigits4(value) {
@@ -27,6 +28,10 @@ export default function StaffLog({
   addStaffMember,
   updateStaffPin,
   removeStaffMember,
+  updateStaffRole,
+  managerUnlocked,
+  verifyManagerPin,
+  unlockManager,
 }) {
   const [selectedStaff, setSelectedStaff] = useState('')
   const [adminOpen, setAdminOpen] = useState(false)
@@ -45,7 +50,8 @@ export default function StaffLog({
     [staff],
   )
   const staffNames = useMemo(() => staffList.map(s => s.name), [staffList])
-  const isManager = currentStaff === 'Manager'
+  const isManager = Boolean(managerUnlocked)
+  const [newIsManager, setNewIsManager] = useState(false)
 
   const [pinEdits, setPinEdits] = useState({})
   useEffect(() => {
@@ -73,7 +79,8 @@ export default function StaffLog({
     if (!n) return setMsg('Enter a name')
     if (p.length !== 4) return setMsg('PIN must be 4 digits')
     if (staffNames.some(name => name.toLowerCase() === n.toLowerCase())) return setMsg('Name already exists')
-    addStaffMember(n, p)
+    addStaffMember(n, p, newIsManager ? 'manager' : 'staff')
+    setNewIsManager(false)
     setNewName('')
     setNewPin('')
     setMsg('Staff member added')
@@ -97,12 +104,13 @@ export default function StaffLog({
         <section className={styles.card}>
           <div className={styles.adminTopRow}>
             <h3 className={styles.title}>Staff admin</h3>
-            {isManager && (
-              <button className={styles.adminBtn} onClick={() => setAdminOpen(v => !v)}>
-                {adminOpen ? 'Close admin' : 'Admin'}
-              </button>
-            )}
+            <button className={styles.adminBtn} onClick={() => setAdminOpen(v => !v)}>
+              {adminOpen ? 'Close admin' : 'Admin'}
+            </button>
           </div>
+          {adminOpen && !isManager && (
+            <ManagerGate unlocked={false} verifyPin={verifyManagerPin} onUnlock={unlockManager} />
+          )}
           {adminOpen && isManager && (
             <div className={styles.adminPanel}>
               {msg && <div className={styles.adminMsg}>{msg}</div>}
@@ -125,6 +133,14 @@ export default function StaffLog({
                     autoComplete="off"
                     type="password"
                   />
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={newIsManager}
+                      onChange={(e) => setNewIsManager(e.target.checked)}
+                    />{' '}
+                    Manager
+                  </label>
                   <button className={styles.clockInBtn} onClick={addStaff}>Add</button>
                 </div>
               </div>
@@ -147,6 +163,12 @@ export default function StaffLog({
                         type="password"
                       />
                       <button className={styles.clockInBtn} onClick={() => savePin(s.name)}>Save PIN</button>
+                      <button
+                        className={styles.clockInBtn}
+                        onClick={() => updateStaffRole(s.name, s.role === 'manager' ? 'staff' : 'manager')}
+                      >
+                        {s.role === 'manager' ? 'Manager (on)' : 'Make manager'}
+                      </button>
                       <button className={styles.clockOutBtn} onClick={() => removeStaff(s.name)}>Remove</button>
                     </div>
                   ))}

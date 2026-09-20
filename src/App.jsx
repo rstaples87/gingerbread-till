@@ -6,10 +6,14 @@ import {
   STOCK_ITEMS as INITIAL_STOCK_ITEMS,
   PRODUCT_VARIANTS as INITIAL_PRODUCT_VARIANTS,
   DEFAULT_TAB_LIMIT,
+  ADMIN_PIN,
   CATEGORIES as DEFAULT_TILL_CATEGORIES,
   STOCK_CATEGORIES as DEFAULT_STOCK_CATEGORIES,
 } from './data'
 import { supabase, isSupabaseConfigured } from './supabase'
+import { useVenueAuth, signOutVenue } from './auth'
+import VenueSignIn from './components/VenueSignIn'
+import ManagerGate from './components/ManagerGate'
 import { logSupabaseWrite } from './supabaseWriteLog'
 import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString } from './utils'
 import Header from './components/Header'
@@ -633,6 +637,39 @@ export default function App() {
   stockItemsSetterRef.current = setStockItemsRaw
   const staffRef = useRef(staff)
   staffRef.current = staff
+
+  // Manager PIN unlock: opens Settings, Sales/close till and staff admin for 10 minutes.
+  const [managerUnlockAt, setManagerUnlockAt] = useState(null)
+  const managerUnlocked = managerUnlockAt != null
+  const unlockManager = useCallback(() => setManagerUnlockAt(Date.now()), [])
+  useEffect(() => {
+    if (managerUnlockAt == null) return undefined
+    const t = setTimeout(() => setManagerUnlockAt(null), 10 * 60 * 1000)
+    return () => clearTimeout(t)
+  }, [managerUnlockAt])
+  /** Manager PINs are staff rows with role 'manager'. Until one exists, the built-in PIN still works. */
+  const verifyManagerPin = useCallback((pin) => {
+    const list = Array.isArray(staffRef.current) ? staffRef.current : []
+    const managers = list.filter(s => s?.role === 'manager')
+    return managers.length ? managers.some(s => String(s.pin) === String(pin)) : pin === ADMIN_PIN
+  }, [])
+
+  // Venue login (soft for now: "Skip" is allowed until database rules require sign-in).
+  const venue = useVenueAuth()
+  const [venueSkipped, setVenueSkipped] = useState(false)
+  const [venueOpen, setVenueOpen] = useState(false)
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
+  useEffect(() => {
+    const on = () => setIsOnline(true)
+    const off = () => setIsOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
+  const showVenueSignIn = isSupabaseConfigured && (venueOpen || (venue.ready && !venue.signedIn && !venueSkipped && isOnline))
   const staffSetterRef = useRef(setStaff)
   staffSetterRef.current = setStaff
   const attendanceLoadersRef = useRef({ setAttendanceLog, setCurrentlyIn })
@@ -1374,12 +1411,12 @@ export default function App() {
     return name
   }, [setCategoryState, showToast, stockCategories, tillCategories])
 
-  const addStaffMember = useCallback((name, pin) => {
+  const addStaffMember = useCallback((name, pin, roleArg = 'staff') => {
     const cleanName = String(name || '').trim()
     const cleanPin = String(pin || '').replace(/\D/g, '').slice(0, 4)
     if (!cleanName || cleanPin.length !== 4) return
     const id = newStaffUuid()
-    const role = 'staff'
+    const role = roleArg === 'manager' ? 'manager' : 'staff'
     const row = { id, name: cleanName, pin: cleanPin, role, active: true }
     setStaff(prev => [...(Array.isArray(prev) ? prev : []), row])
     sendStaffOp('staff_add', row)
@@ -1393,6 +1430,15 @@ export default function App() {
       (Array.isArray(prev) ? prev : []).map(s => (s?.name === name ? { ...s, pin: cleanPin } : s)),
     )
     sendStaffOp('staff_pin', { id: rowId, name, pin: cleanPin })
+  }, [setStaff])
+
+  const updateStaffRole = useCallback((name, role) => {
+    const nextRole = role === 'manager' ? 'manager' : 'staff'
+    const rowId = (Array.isArray(staffRef.current) ? staffRef.current : []).find(s => s?.name === name)?.id ?? null
+    setStaff(prev =>
+      (Array.isArray(prev) ? prev : []).map(s => (s?.name === name ? { ...s, role: nextRole } : s)),
+    )
+    sendStaffOp('staff_role', { id: rowId, name, role: nextRole })
   }, [setStaff])
 
   const removeStaffMember = useCallback((name) => {
@@ -1500,7 +1546,14 @@ export default function App() {
     stockCategories,
     mixerStockIds,
     staff, setStaff,
-    addStaffMember, updateStaffPin, removeStaffMember,
+    addStaffMember, updateStaffPin, updateStaffRole, removeStaffMember,
+    managerUnlocked, verifyManagerPin, unlockManager,
+    venueAuth: {
+      signedIn: venue.signedIn,
+      email: venue.email,
+      signOut: signOutVenue,
+      openSignIn: () => setVenueOpen(true),
+    },
     currentStaff, setCurrentStaff,
     attendanceLog: hydratedAttendanceLog, setAttendanceLog,
     currentlyIn: hydratedCurrentlyIn, setCurrentlyIn,
@@ -1543,17 +1596,36 @@ export default function App() {
       {view === 'tabs'  && <TabsView {...sharedProps} />}
       {view === 'stock' && <Stock  {...sharedProps} />}
       {view === 'staff' && <StaffLog {...sharedProps} />}
-      {view === 'sales' && <Sales  {...sharedProps} />}
-      {view === 'settings' && <Settings {...sharedProps} />}
+      {view === 'sales' && (
+        <ManagerGate unlocked={managerUnlocked} verifyPin={verifyManagerPin} onUnlock={unlockManager} title="Manager PIN: Sales and close till">
+          <Sales {...sharedProps} />
+        </ManagerGate>
+      )}
+      {view === 'settings' && (
+        <ManagerGate unlocked={managerUnlocked} verifyPin={verifyManagerPin} onUnlock={unlockManager} title="Manager PIN: Settings">
+          <Settings {...sharedProps} />
+        </ManagerGate>
+      )}
 
       {staffOverlayOpen && (
         <StaffOverlay
+          verifyManagerPin={verifyManagerPin}
           onSelect={(name) => {
             setCurrentStaff(name)
+            unlockManager()
             setStaffOverlayOpen(false)
             showToast('Serving as ' + name)
           }}
           onClose={() => setStaffOverlayOpen(false)}
+        />
+      )}
+      {showVenueSignIn && (
+        <VenueSignIn
+          onDone={() => setVenueOpen(false)}
+          onSkip={() => {
+            setVenueSkipped(true)
+            setVenueOpen(false)
+          }}
         />
       )}
       <Toast msg={toast.msg} visible={toast.visible} />

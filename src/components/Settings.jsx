@@ -157,6 +157,7 @@ export default function Settings({
   saveStockDefinition,
   deleteStockDefinition,
   saveCategory,
+  venueAuth,
 }) {
   const [tab, setTab] = useState('products')
   const [productForm, setProductForm] = useState(null)
@@ -275,6 +276,16 @@ export default function Settings({
   return (
     <div className={styles.wrap}>
       <div className={styles.scroll}>
+        {venueAuth && (
+          <div style={{ marginBottom: 12, fontSize: 14 }}>
+            Venue login: {venueAuth.signedIn ? 'signed in as ' + (venueAuth.email ?? 'venue') : 'not signed in'}{' '}
+            {venueAuth.signedIn ? (
+              <button type="button" onClick={venueAuth.signOut}>Sign out</button>
+            ) : (
+              <button type="button" onClick={venueAuth.openSignIn}>Sign in</button>
+            )}
+          </div>
+        )}
         <div className={styles.topTabs}>
           <button
             type="button"
