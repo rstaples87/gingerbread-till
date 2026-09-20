@@ -32,6 +32,11 @@ export function readPendingEodReportRows() {
   return readSyncQueue().filter(i => i?.type === 'eod_report' && i.payload).map(i => i.payload)
 }
 
+/** attendance_log rows still waiting to upload. */
+export function readPendingAttendanceRows() {
+  return readSyncQueue().filter(i => i?.type === 'attendance' && i.payload).map(i => i.payload)
+}
+
 export function isLikelyNetworkFailure(err) {
   if (!err) return false
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
@@ -88,6 +93,9 @@ async function flushItems(queue) {
           res = await supabase.from('bar_orders').upsert(rest, { onConflict: 'id' })
         }
         logSupabaseWrite('bar_orders', 'upsert', res?.error)
+      } else if (item.type === 'attendance') {
+        res = await supabase.from('attendance_log').upsert(item.payload, { onConflict: 'id' })
+        logSupabaseWrite('attendance_log', 'upsert', res?.error)
       } else if (item.type === 'eod_report') {
         res = await supabase.from('eod_reports').upsert(item.payload, { onConflict: 'id' })
         logSupabaseWrite('eod_reports', 'upsert', res?.error)

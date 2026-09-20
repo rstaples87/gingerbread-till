@@ -24,7 +24,7 @@ import Settings from './components/Settings'
 import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
-import { readSyncQueue, readPendingEodReportRows, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
+import { readSyncQueue, readPendingEodReportRows, readPendingAttendanceRows, maybeQueueSyncFailure, flushSyncQueue } from './syncQueue'
 import {
   syncTransactionToSupabaseFireAndForget,
   fetchTodayTransactionsFromSupabase,
@@ -149,18 +149,17 @@ function recomputeCurrentlyInFromTodaysLog(todayEntries) {
 function insertAttendanceLogToSupabase({ id, staff_name, action, time }) {
   if (!supabase) return
   const row = { id, staff_name, action, time }
+  // Upsert by client-generated id so a queued replay can't duplicate the entry.
   supabase
     .from('attendance_log')
-    .insert(row)
+    .upsert(row, { onConflict: 'id' })
     .then(({ error }) => {
-      if (error) {
-        logSupabaseWrite('attendance_log', 'insert', error)
-      } else {
-        console.log('[Supabase write] attendance_log insert ok')
-      }
+      logSupabaseWrite('attendance_log', 'upsert', error)
+      if (error) maybeQueueSyncFailure('attendance', row, error)
     })
     .catch((err) => {
-      logSupabaseWrite('attendance_log', 'insert', err)
+      logSupabaseWrite('attendance_log', 'upsert', err)
+      maybeQueueSyncFailure('attendance', row, err)
     })
 }
 
@@ -174,6 +173,12 @@ async function loadAttendanceFromSupabase(setAttendanceLog, setCurrentlyIn) {
       .limit(800)
     if (error) throw error
     const rows = (data || []).map(normaliseAttendanceRow).filter(Boolean)
+    // Keep clock-ins/outs still waiting in the offline queue so a refetch doesn't wipe them.
+    const serverIds = new Set(rows.map(r => r.id))
+    for (const p of readPendingAttendanceRows()) {
+      if (!serverIds.has(p.id)) rows.push(normaliseAttendanceRow(p))
+    }
+    rows.sort((x, y) => new Date(x.time) - new Date(y.time))
     setAttendanceLog(rows)
     const now = new Date()
     const todayRows = rows.filter(e => isSameLocalCalendarDay(new Date(e.time), now))
@@ -793,7 +798,12 @@ export default function App() {
     const tryFlush = async () => {
       if (!readSyncQueue().length) return
       const hadEodReport = readPendingEodReportRows().length > 0
+      const hadAttendance = readPendingAttendanceRows().length > 0
       await flushSyncQueue()
+      if (hadAttendance && readPendingAttendanceRows().length === 0) {
+        const { setAttendanceLog: setLog, setCurrentlyIn: setIn } = attendanceLoadersRef.current
+        await loadAttendanceFromSupabase(setLog, setIn)
+      }
       if (hadEodReport && readPendingEodReportRows().length === 0) {
         setEodReports(await loadEodReportsWithFallback())
       }
