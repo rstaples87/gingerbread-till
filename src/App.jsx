@@ -36,6 +36,9 @@ import { normaliseTabRowLive } from './supabaseRealtimeMerge'
 import {
   loadTillStockFromSupabase,
   upsertTillStockRowToSupabase,
+  applyTillStockDelta,
+  applyStockItemDelta,
+  withPendingDeltas,
 } from './tillStockSupabase'
 
 function uniqueNonEmpty(items) {
@@ -240,6 +243,24 @@ function upsertStockItemRowToSupabase(stockKey, qty) {
     })
 }
 
+/** Send a till stock change as a delta (atomic on the server); queue it if the network is down. */
+function sendTillStockDelta(productId, delta) {
+  const payload = { product_id: Number(productId), delta, op_id: crypto.randomUUID() }
+  applyTillStockDelta(payload).then(({ error }) => {
+    logSupabaseWrite('till_stock', 'adjust', error)
+    if (error) maybeQueueSyncFailure('till_stock_delta', payload, error)
+  })
+}
+
+/** Same for warehouse (stock take) items. */
+function sendStockItemDelta(stockKey, delta) {
+  const payload = { stock_key: String(stockKey), delta, op_id: crypto.randomUUID() }
+  applyStockItemDelta(payload).then(({ error }) => {
+    logSupabaseWrite('stock_items', 'adjust', error)
+    if (error) maybeQueueSyncFailure('stock_delta', payload, error)
+  })
+}
+
 /** Upsert warehouse stock map — fire-and-forget */
 function syncStockToSupabase(map) {
   if (!supabase || !map) return
@@ -274,7 +295,7 @@ async function loadStockItemsFromSupabase(setStockItemsRaw, options = {}) {
     for (const row of rows) {
       next[row.stock_key] = Number(row.qty)
     }
-    setStockItemsRaw(next)
+    setStockItemsRaw(withPendingDeltas(next, 'stock_delta', 'stock_key'))
     return rows.length
   } catch (err) {
     console.warn('loadStockItemsFromSupabase failed:', err?.message || err)
@@ -481,34 +502,39 @@ export default function App() {
   const [categoryState, setCategoryState] = useLocalStorage('bt_categories', { till: [], stock: [] })
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
+  // Latest stock maps, so changes can be computed and sent as deltas outside React updaters
+  // (updaters must be pure — StrictMode runs them twice, which would double-send deltas).
+  const stockRef = useRef(stock)
+  stockRef.current = stock
+  const stockItemsRef = useRef(stockItems)
+  stockItemsRef.current = stockItems
+
+  // Sales, voids and product edits change stock through these: send only the change (delta),
+  // never the absolute count, so two tills selling at once can't overwrite each other.
   const setStock = useCallback((update) => {
-    setStockRaw(prev => {
-      const next = typeof update === 'function' ? update(prev) : update
-      if (supabase) {
-        const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})])
-        for (const id of keys) {
-          if (Number(prev?.[id] ?? 0) !== Number(next?.[id] ?? 0)) {
-            upsertTillStockRowToSupabase(id, next[id] ?? 0, onTillStockUpsertQueueable)
-          }
-        }
-      }
-      return next
-    })
+    const prev = stockRef.current
+    const next = typeof update === 'function' ? update(prev) : update
+    stockRef.current = next
+    setStockRaw(next)
+    if (!supabase) return
+    const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})])
+    for (const id of keys) {
+      const delta = Number(next?.[id] ?? 0) - Number(prev?.[id] ?? 0)
+      if (delta !== 0) sendTillStockDelta(id, delta)
+    }
   }, [])
 
   const setStockItems = useCallback((update) => {
-    setStockItemsRaw(prev => {
-      const next = typeof update === 'function' ? update(prev) : update
-      if (supabase) {
-        const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})])
-        for (const id of keys) {
-          if (Number(prev?.[id] ?? 0) !== Number(next?.[id] ?? 0)) {
-            upsertStockItemRowToSupabase(id, next[id] ?? 0)
-          }
-        }
-      }
-      return next
-    })
+    const prev = stockItemsRef.current
+    const next = typeof update === 'function' ? update(prev) : update
+    stockItemsRef.current = next
+    setStockItemsRaw(next)
+    if (!supabase) return
+    const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})])
+    for (const id of keys) {
+      const delta = Number(next?.[id] ?? 0) - Number(prev?.[id] ?? 0)
+      if (delta !== 0) sendStockItemDelta(id, delta)
+    }
   }, [])
   const [staff, setStaff] = useLocalStorage('bt_staff', INITIAL_STAFF)
   const [currentStaff, setCurrentStaff] = useLocalStorage('bt_current_staff', null)
@@ -822,13 +848,13 @@ export default function App() {
 
   /** Stock view “Till products” ± — writes till_stock only (product_id, qty). */
   const adjustTillStock = useCallback((productId, delta) => {
-    setStockRaw(prev => {
-      const newQty = Math.max(0, (prev[productId] ?? 0) + delta)
-      if (supabase) {
-        upsertTillStockRowToSupabase(productId, newQty, onTillStockUpsertQueueable)
-      }
-      return { ...prev, [productId]: newQty }
-    })
+    const prev = stockRef.current
+    const newQty = Math.max(0, (prev[productId] ?? 0) + delta)
+    const applied = newQty - (prev[productId] ?? 0)
+    const next = { ...prev, [productId]: newQty }
+    stockRef.current = next
+    setStockRaw(next)
+    if (supabase && applied !== 0) sendTillStockDelta(productId, applied)
   }, [])
 
   const setStockValue = useCallback((productId, val) => {
@@ -841,13 +867,13 @@ export default function App() {
 
   /** Stock view “Stock take” ± — writes stock_items only (stock_key, qty). */
   const adjustStockItem = useCallback((stockKey, delta) => {
-    setStockItemsRaw(prev => {
-      const newQty = Math.max(0, (prev[stockKey] ?? 0) + delta)
-      if (supabase) {
-        upsertStockItemRowToSupabase(stockKey, newQty)
-      }
-      return { ...prev, [stockKey]: newQty }
-    })
+    const prev = stockItemsRef.current
+    const newQty = Math.max(0, (prev[stockKey] ?? 0) + delta)
+    const applied = newQty - (prev[stockKey] ?? 0)
+    const next = { ...prev, [stockKey]: newQty }
+    stockItemsRef.current = next
+    setStockItemsRaw(next)
+    if (supabase && applied !== 0) sendStockItemDelta(stockKey, applied)
   }, [])
 
   const addTransaction = useCallback((tx) => {

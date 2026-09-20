@@ -1,5 +1,64 @@
 import { supabase } from './supabase'
 import { logSupabaseWrite } from './supabaseWriteLog'
+import { readPendingDeltaMap } from './syncQueueStore'
+
+function isMissingRpcError(err) {
+  const msg = String(err?.message ?? '').toLowerCase()
+  return err?.code === 'PGRST202' || err?.code === '42883' || msg.includes('could not find the function')
+}
+
+/**
+ * Apply a +/- stock delta atomically via an RPC (payload carries op_id so replays apply once).
+ * If the RPC hasn't been created in the database yet, falls back to read-modify-write.
+ */
+async function applyDelta(rpcName, rpcArgs, table, keyCol, keyVal, delta) {
+  if (!supabase) return { error: new Error('no supabase') }
+  try {
+    const res = await supabase.rpc(rpcName, rpcArgs)
+    if (!isMissingRpcError(res.error)) return { error: res.error ?? null }
+    const { data, error } = await supabase.from(table).select('qty').eq(keyCol, keyVal).maybeSingle()
+    if (error) return { error }
+    const next = Math.max(0, Number(data?.qty ?? 0) + delta)
+    const up = await supabase.from(table).upsert({ [keyCol]: keyVal, qty: next }, { onConflict: keyCol })
+    return { error: up.error ?? null }
+  } catch (err) {
+    return { error: err }
+  }
+}
+
+/** payload: { product_id, delta, op_id } */
+export function applyTillStockDelta(payload) {
+  const pid = Number(payload?.product_id)
+  const delta = Number(payload?.delta)
+  if (!Number.isFinite(pid) || !Number.isFinite(delta)) return Promise.resolve({ error: new Error('invalid payload') })
+  return applyDelta(
+    'adjust_till_stock',
+    { p_product_id: pid, p_delta: delta, p_op_id: payload.op_id },
+    'till_stock', 'product_id', pid, delta,
+  )
+}
+
+/** payload: { stock_key, delta, op_id } */
+export function applyStockItemDelta(payload) {
+  const key = payload?.stock_key
+  const delta = Number(payload?.delta)
+  if (!key || !Number.isFinite(delta)) return Promise.resolve({ error: new Error('invalid payload') })
+  return applyDelta(
+    'adjust_stock_item',
+    { p_stock_key: key, p_delta: delta, p_op_id: payload.op_id },
+    'stock_items', 'stock_key', key, delta,
+  )
+}
+
+/** Add still-queued (unsynced) deltas on top of server values so a refetch doesn't hide them. */
+export function withPendingDeltas(map, type, keyField) {
+  const pending = readPendingDeltaMap(type, keyField)
+  const out = { ...map }
+  for (const [k, d] of Object.entries(pending)) {
+    out[k] = Math.max(0, Number(out[k] ?? 0) + d)
+  }
+  return out
+}
 
 /** 'qty' | 'quantity' | null (try qty first, then quantity on first failure) */
 let tillStockQtyColumn = null
@@ -110,7 +169,7 @@ export async function loadTillStockFromSupabase(setStockRaw, options = {}) {
         tillStockQtyColumn = 'qty'
       }
     }
-    setStockRaw(next)
+    setStockRaw(withPendingDeltas(next, 'till_stock_delta', 'product_id'))
     return rows.length
   } catch (err) {
     console.warn('loadTillStockFromSupabase failed:', err?.message || err)

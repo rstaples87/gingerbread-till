@@ -1,31 +1,19 @@
 import { supabase } from './supabase'
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { upsertTillStockFromQueuePayload } from './tillStockSupabase'
+import {
+  upsertTillStockFromQueuePayload,
+  applyTillStockDelta,
+  applyStockItemDelta,
+} from './tillStockSupabase'
+import {
+  SYNC_QUEUE_KEY,
+  readSyncQueue,
+  writeSyncQueue,
+  enqueueSyncQueueItem,
+  readPendingDeltaMap,
+} from './syncQueueStore'
 
-export const SYNC_QUEUE_KEY = 'bt_sync_queue'
-
-export function readSyncQueue() {
-  try {
-    const raw = localStorage.getItem(SYNC_QUEUE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-export function writeSyncQueue(items) {
-  try {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(items))
-  } catch {}
-}
-
-export function enqueueSyncQueueItem(type, payload) {
-  const queue = readSyncQueue()
-  queue.push({ type, payload, timestamp: Date.now() })
-  writeSyncQueue(queue)
-}
+export { SYNC_QUEUE_KEY, readSyncQueue, writeSyncQueue, enqueueSyncQueueItem, readPendingDeltaMap }
 
 /** eod_reports rows still waiting to upload (so the UI can keep showing them). */
 export function readPendingEodReportRows() {
@@ -93,6 +81,12 @@ async function flushItems(queue) {
           res = await supabase.from('bar_orders').upsert(rest, { onConflict: 'id' })
         }
         logSupabaseWrite('bar_orders', 'upsert', res?.error)
+      } else if (item.type === 'till_stock_delta') {
+        res = await applyTillStockDelta(item.payload)
+        logSupabaseWrite('till_stock', 'adjust', res?.error)
+      } else if (item.type === 'stock_delta') {
+        res = await applyStockItemDelta(item.payload)
+        logSupabaseWrite('stock_items', 'adjust', res?.error)
       } else if (item.type === 'attendance') {
         res = await supabase.from('attendance_log').upsert(item.payload, { onConflict: 'id' })
         logSupabaseWrite('attendance_log', 'upsert', res?.error)
