@@ -18,7 +18,7 @@ function openFor(openedAt, now) {
 }
 
 export default function Tables({
-  floorAreas = [], floorTables = [], openTabs = [],
+  floorAreas = [], floorTables = [], floorShapes = [], openTabs = [],
   openNewTabEntry, switchOrder, goToTill, showToast,
 }) {
   const areas = useMemo(
@@ -43,6 +43,7 @@ export default function Tables({
     [floorTables, activeArea],
   )
 
+  const structuresHere = floorShapes.filter(s => s.areaId === activeArea)
   const tabForTable = (table) => openTabs.find(t => t.tableId === table.id)
   const drinksTabs = openTabs.filter(t => !t.tableId)
   const openCountIn = (id) => floorTables.filter(t => t.areaId === id && tabForTable(t)).length
@@ -109,9 +110,10 @@ export default function Tables({
           </>
         ) : (
           <>
-            {tablesHere.length > 0 && (
+            {(tablesHere.length > 0 || structuresHere.length > 0) && (
               <FloorPlan
                 tables={tablesHere}
+                structures={structuresHere}
                 mode="view"
                 onTap={onTable}
                 renderTile={(table) => {

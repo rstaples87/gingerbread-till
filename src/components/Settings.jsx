@@ -172,6 +172,9 @@ export default function Settings({
   deleteOptionGroup,
   floorAreas = [],
   floorTables = [],
+  floorShapes = [],
+  saveFloorShape,
+  deleteFloorShape,
   saveFloorArea,
   deleteFloorArea,
   saveFloorTable,
@@ -422,7 +425,15 @@ export default function Settings({
                     </button>
                   </div>
                   {planAreaId === area.id && (
-                    <FloorPlanEditor tables={mine} saveFloorTable={saveFloorTable} showToast={showToast} />
+                    <FloorPlanEditor
+                      areaId={area.id}
+                      tables={mine}
+                      structures={floorShapes.filter(s => s.areaId === area.id)}
+                      saveFloorTable={saveFloorTable}
+                      saveFloorShape={saveFloorShape}
+                      deleteFloorShape={deleteFloorShape}
+                      showToast={showToast}
+                    />
                   )}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
                     {mine.map(t => (

@@ -17,6 +17,8 @@ export const MENU_OP_TYPES = new Set([
   'floor_area_delete',
   'floor_table',
   'floor_table_delete',
+  'floor_shape',
+  'floor_shape_delete',
 ])
 
 export function productToRow(product, variant) {
@@ -94,6 +96,10 @@ export async function applyMenuOp(type, payload) {
       res = await supabase.from('floor_tables').upsert(payload, { onConflict: 'id' })
     } else if (type === 'floor_table_delete') {
       res = await supabase.from('floor_tables').delete().eq('id', payload.id)
+    } else if (type === 'floor_shape') {
+      res = await supabase.from('floor_shapes').upsert(payload, { onConflict: 'id' })
+    } else if (type === 'floor_shape_delete') {
+      res = await supabase.from('floor_shapes').delete().eq('id', payload.id)
     } else if (type === 'menu_category') {
       res = await supabase.from('menu_categories').upsert(payload, { onConflict: 'kind,name' })
     } else {
@@ -113,12 +119,13 @@ export async function fetchMenuFromSupabase() {
     const og = features.foodOptions ? await supabase.from('menu_option_groups').select('*') : { data: null, error: null }
     const fa = features.tables ? await supabase.from('floor_areas').select('*') : { data: null, error: null }
     const ft = features.tables ? await supabase.from('floor_tables').select('*') : { data: null, error: null }
+    const fsh = features.tables ? await supabase.from('floor_shapes').select('*') : { data: null, error: null }
     const [p, s, c] = await Promise.all([
       supabase.from('menu_products').select('*'),
       supabase.from('stock_items').select('stock_key, name, category, unit, display_unit, data').not('name', 'is', null),
       supabase.from('menu_categories').select('kind, name'),
     ])
-    const error = p.error || s.error || c.error || og.error || fa.error || ft.error
+    const error = p.error || s.error || c.error || og.error || fa.error || ft.error || fsh.error
     if (error) {
       console.warn('fetchMenuFromSupabase:', error.message || error)
       return null
@@ -148,7 +155,10 @@ export async function fetchMenuFromSupabase() {
         shape: r.shape ?? null,
       }))
       : null
-    return { products, variants, stockDefinitions, categories, optionGroups, floorAreas, floorTables }
+    const floorShapes = fsh.data
+      ? fsh.data.map(r => ({ id: r.id, areaId: r.area_id, x: Number(r.x), y: Number(r.y), w: Number(r.w), h: Number(r.h), label: r.label ?? '', style: r.style || 'wall' }))
+      : null
+    return { products, variants, stockDefinitions, categories, optionGroups, floorAreas, floorTables, floorShapes }
   } catch (err) {
     console.warn('fetchMenuFromSupabase failed:', err?.message || err)
     return null

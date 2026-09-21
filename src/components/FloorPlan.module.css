@@ -35,3 +35,12 @@
 .meta { font-size: 1.5cqw; }
 .open { background: var(--accent); }
 .stale { border-color: var(--red); box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.3); }
+
+/* Walls and structures */
+.structure { position: absolute; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
+.inert { pointer-events: none; }
+.st_wall { background: #5b5f6b; border: 1px solid #3f4250; color: #fff; }
+.st_bar { background: #d9b382; border: 1px solid #a67c52; color: var(--text); }
+.st_outline { background: transparent; border: 2px dashed #7b8794; color: #556; }
+.structureLabel { font-size: 1.6cqw; font-weight: 600; pointer-events: none; }
+.handle { position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; background: var(--navy); border: 2px solid #fff; border-radius: 4px; cursor: nwse-resize; touch-action: none; }

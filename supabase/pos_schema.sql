@@ -243,3 +243,25 @@ alter table public.floor_tables add column if not exists y numeric;
 alter table public.floor_tables add column if not exists w numeric;
 alter table public.floor_tables add column if not exists h numeric;
 alter table public.floor_tables add column if not exists shape text;
+
+-- Floor plan walls and structures (added 2026-09-21).
+create table if not exists public.floor_shapes (
+  id text not null primary key,
+  area_id text not null,
+  x numeric not null default 0,
+  y numeric not null default 0,
+  w numeric not null default 10,
+  h numeric not null default 3,
+  label text,
+  style text not null default 'wall'
+);
+alter table public.floor_shapes enable row level security;
+drop policy if exists "venue_signed_in" on public.floor_shapes;
+create policy "venue_signed_in" on public.floor_shapes for all to authenticated using (true) with check (true);
+alter table public.floor_shapes replica identity full;
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'floor_shapes') then
+    alter publication supabase_realtime add table public.floor_shapes;
+  end if;
+end $$;

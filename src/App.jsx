@@ -375,6 +375,7 @@ async function loadMenuFromSupabase(setters, getLocal, { seed = false } = {}) {
   if (menu.optionGroups) setters.setOptionGroups(menu.optionGroups)
   if (menu.floorAreas) setters.setFloorAreas(menu.floorAreas)
   if (menu.floorTables) setters.setFloorTables(menu.floorTables)
+  if (menu.floorShapes) setters.setFloorShapes(menu.floorShapes)
   if (seed) {
     const seedProducts = menu.products.length === 0 && local.products.length > 0
     const seedStock = menu.stockDefinitions.length === 0 && local.stockDefinitions.length > 0
@@ -585,6 +586,7 @@ export default function App() {
   const [optionGroups, setOptionGroups] = useLocalStorage('bt_option_groups', [])
   const [floorAreas, setFloorAreas] = useLocalStorage('bt_floor_areas', [])
   const [floorTables, setFloorTables] = useLocalStorage('bt_floor_tables', [])
+  const [floorShapes, setFloorShapes] = useLocalStorage('bt_floor_shapes', [])
   const [categoryState, setCategoryState] = useLocalStorage('bt_categories', { till: [], stock: [] })
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
@@ -635,7 +637,7 @@ export default function App() {
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const [eodReports, setEodReports] = useState([])
   const menuSettersRef = useRef({})
-  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState, setOptionGroups, setFloorAreas, setFloorTables }
+  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState, setOptionGroups, setFloorAreas, setFloorTables, setFloorShapes }
   const menuLocalRef = useRef({})
   menuLocalRef.current = { products, productVariants, stockDefinitions, categoryState }
   const tabsLoadSettersRef = useRef({ setOpenTabs, setOrders, setTabIdCounter })
@@ -865,6 +867,7 @@ export default function App() {
     if (features.tables) {
       subscribeTable('till_realtime_floor_areas', 'floor_areas', onMenuChange)
       subscribeTable('till_realtime_floor_tables', 'floor_tables', onMenuChange)
+      subscribeTable('till_realtime_floor_shapes', 'floor_shapes', onMenuChange)
     }
     // stock_items also changes on every sale (qty), so only refetch the menu when a definition changed.
     const definitionChanged = (payload) => {
@@ -1500,11 +1503,13 @@ export default function App() {
 
   const deleteFloorArea = useCallback((id) => {
     floorTables.filter(t => t.areaId === id).forEach(t => sendMenuOp('floor_table_delete', { id: t.id }))
+    floorShapes.filter(s => s.areaId === id).forEach(s => sendMenuOp('floor_shape_delete', { id: s.id }))
+    setFloorShapes(prev => prev.filter(s => s.areaId !== id))
     setFloorTables(prev => prev.filter(t => t.areaId !== id))
     setFloorAreas(prev => prev.filter(a => a.id !== id))
     sendMenuOp('floor_area_delete', { id })
     showToast('Area deleted')
-  }, [floorTables, setFloorTables, setFloorAreas, showToast])
+  }, [floorTables, floorShapes, setFloorTables, setFloorShapes, setFloorAreas, showToast])
 
   const saveFloorTable = useCallback((table) => {
     const name = String(table.name || '').trim()
@@ -1524,6 +1529,29 @@ export default function App() {
     sendMenuOp('floor_table', { id: row.id, area_id: row.areaId, name: row.name, seats: row.seats, sort: row.sort, x: row.x, y: row.y, w: row.w, h: row.h, shape: row.shape })
     return row
   }, [floorTables, setFloorTables, showToast])
+
+  /** Walls, bar and other simple structures drawn on a floor plan (not tables). */
+  const saveFloorShape = useCallback((shape) => {
+    const existing = shape.id ? floorShapes.find(s => s.id === shape.id) : null
+    const pick = (k, dflt) => (shape[k] !== undefined ? shape[k] : (existing?.[k] ?? dflt))
+    const row = {
+      id: existing?.id || newFloorId('shape_'),
+      areaId: pick('areaId', null),
+      x: Number(pick('x', 0)), y: Number(pick('y', 0)),
+      w: Number(pick('w', 10)), h: Number(pick('h', 3)),
+      label: String(pick('label', '') || ''),
+      style: ['wall', 'bar', 'outline'].includes(pick('style', 'wall')) ? pick('style', 'wall') : 'wall',
+    }
+    if (!row.areaId) return null
+    setFloorShapes(prev => (existing ? prev.map(s => (s.id === row.id ? row : s)) : [...prev, row]))
+    sendMenuOp('floor_shape', { id: row.id, area_id: row.areaId, x: row.x, y: row.y, w: row.w, h: row.h, label: row.label, style: row.style })
+    return row
+  }, [floorShapes, setFloorShapes])
+
+  const deleteFloorShape = useCallback((id) => {
+    setFloorShapes(prev => prev.filter(s => s.id !== id))
+    sendMenuOp('floor_shape_delete', { id })
+  }, [setFloorShapes])
 
   const deleteFloorTable = useCallback((id) => {
     setFloorTables(prev => prev.filter(t => t.id !== id))
@@ -1732,7 +1760,8 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
-    floorAreas, floorTables, saveFloorTable, deleteFloorTable, addFloorTableRange,
+    floorAreas, floorTables, floorShapes, saveFloorTable, deleteFloorTable, addFloorTableRange,
+    saveFloorShape, deleteFloorShape,
     saveFloorArea, deleteFloorArea,
     goToTill: () => setView('till'),
     showToast,
