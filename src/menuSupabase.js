@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { features } from './features'
 
 // Shared menu (products + variants, stock item definitions, categories) in Supabase.
 // Tables: menu_products, menu_categories, and definition columns on stock_items (see migration 20260920130000).
@@ -10,6 +11,8 @@ export const MENU_OP_TYPES = new Set([
   'stock_definition',
   'stock_definition_delete',
   'menu_category',
+  'option_group',
+  'option_group_delete',
 ])
 
 export function productToRow(product, variant) {
@@ -75,6 +78,10 @@ export async function applyMenuOp(type, payload) {
       res = await supabase.from('stock_items').upsert(payload, { onConflict: 'stock_key' })
     } else if (type === 'stock_definition_delete') {
       res = await supabase.from('stock_items').delete().eq('stock_key', payload.stock_key)
+    } else if (type === 'option_group') {
+      res = await supabase.from('menu_option_groups').upsert(payload, { onConflict: 'id' })
+    } else if (type === 'option_group_delete') {
+      res = await supabase.from('menu_option_groups').delete().eq('id', payload.id)
     } else if (type === 'menu_category') {
       res = await supabase.from('menu_categories').upsert(payload, { onConflict: 'kind,name' })
     } else {
@@ -90,12 +97,14 @@ export async function applyMenuOp(type, payload) {
 export async function fetchMenuFromSupabase() {
   if (!supabase) return null
   try {
+    // Option groups only exist in the POS database.
+    const og = features.foodOptions ? await supabase.from('menu_option_groups').select('*') : { data: null, error: null }
     const [p, s, c] = await Promise.all([
       supabase.from('menu_products').select('*'),
       supabase.from('stock_items').select('stock_key, name, category, unit, display_unit, data').not('name', 'is', null),
       supabase.from('menu_categories').select('kind, name'),
     ])
-    const error = p.error || s.error || c.error
+    const error = p.error || s.error || c.error || og.error
     if (error) {
       console.warn('fetchMenuFromSupabase:', error.message || error)
       return null
@@ -112,7 +121,11 @@ export async function fetchMenuFromSupabase() {
     for (const row of c.data ?? []) {
       if (categories[row.kind]) categories[row.kind].push(row.name)
     }
-    return { products, variants, stockDefinitions, categories }
+    const optionGroups = og.data
+      ? og.data.map(r => ({ id: r.id, name: r.name, required: r.required !== false, choices: Array.isArray(r.choices) ? r.choices : [] }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      : null
+    return { products, variants, stockDefinitions, categories, optionGroups }
   } catch (err) {
     console.warn('fetchMenuFromSupabase failed:', err?.message || err)
     return null

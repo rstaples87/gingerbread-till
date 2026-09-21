@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, tabTotal } from '../utils'
+import { fmt, tabTotal, saleLineText } from '../utils'
 import styles from './TabsView.module.css'
 
 export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, switchOrder, showToast, updateTabLimit }) {
@@ -143,7 +143,7 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
                 </div>
                 <div className={styles.cardItems}>
                   {tab.items.length
-                    ? tab.items.map(i => `${i.qty}× ${i.name} — ${fmt(i.price * i.qty)}`).join('\n')
+                    ? tab.items.map(i => `${saleLineText(i)} — ${fmt(i.price * i.qty)}`).join('\n')
                     : 'No items yet'}
                 </div>
                 <div className={styles.cardBtns}>
@@ -162,7 +162,7 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
           <div className={styles.sheet} onClick={e => e.stopPropagation()}>
             <div className={styles.sheetTitle}>Settle tab</div>
             <div className={styles.sheetAmount}>{fmt(settleTotal)}</div>
-            <div className={styles.sheetItems}>{tab.items.map(i => `${i.qty}× ${i.name}`).join('\n')}</div>
+            <div className={styles.sheetItems}>{tab.items.map(saleLineText).join('\n')}</div>
             <div className={styles.payLabel}>Payment method</div>
             <div className={styles.payRow}>
               {['cash','card','account'].map(type => (

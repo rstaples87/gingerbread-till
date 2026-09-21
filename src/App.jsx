@@ -25,7 +25,7 @@ const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
 const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
 const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -371,6 +371,7 @@ async function loadMenuFromSupabase(setters, getLocal, { seed = false } = {}) {
   const menu = await fetchMenuFromSupabase()
   if (!menu) return false
   const local = getLocal()
+  if (menu.optionGroups) setters.setOptionGroups(menu.optionGroups)
   if (seed) {
     const seedProducts = menu.products.length === 0 && local.products.length > 0
     const seedStock = menu.stockDefinitions.length === 0 && local.stockDefinitions.length > 0
@@ -575,6 +576,7 @@ export default function App() {
   const [products, setProducts] = useLocalStorage('bt_products', INITIAL_PRODUCTS)
   const [productVariants, setProductVariants] = useLocalStorage('bt_product_variants', INITIAL_PRODUCT_VARIANTS)
   const [stockDefinitions, setStockDefinitions] = useLocalStorage('bt_stock_definitions', INITIAL_STOCK_ITEMS)
+  const [optionGroups, setOptionGroups] = useLocalStorage('bt_option_groups', [])
   const [categoryState, setCategoryState] = useLocalStorage('bt_categories', { till: [], stock: [] })
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
@@ -625,7 +627,7 @@ export default function App() {
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const [eodReports, setEodReports] = useState([])
   const menuSettersRef = useRef({})
-  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState }
+  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState, setOptionGroups }
   const menuLocalRef = useRef({})
   menuLocalRef.current = { products, productVariants, stockDefinitions, categoryState }
   const tabsLoadSettersRef = useRef({ setOpenTabs, setOrders, setTabIdCounter })
@@ -851,6 +853,7 @@ export default function App() {
     }
     subscribeTable('till_realtime_menu_products', 'menu_products', onMenuChange)
     subscribeTable('till_realtime_menu_categories', 'menu_categories', onMenuChange)
+    if (features.foodOptions) subscribeTable('till_realtime_menu_option_groups', 'menu_option_groups', onMenuChange)
     // stock_items also changes on every sale (qty), so only refetch the menu when a definition changed.
     const definitionChanged = (payload) => {
       if (payload.eventType !== 'UPDATE') return true
@@ -1110,10 +1113,14 @@ export default function App() {
           const qty = typeof line === 'number' ? line : (line?.qty || 0)
           const selectedStockId = typeof line === 'object' ? line?.selectedStockId : null
           const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
-          const p = products.find(x => x.id === Number(id))
+          const p = products.find(x => x.id === lineProductId(id))
           if (!p) return
           const itemName = orderLineLabel(line, p.name)
-          if (selectedStockId && productVariants[p.id]) {
+          const lineOptions = typeof line === 'object' ? (line?.options || []) : []
+          const lineNote = typeof line === 'object' ? (line?.note || '') : ''
+          if (p.group === 'food') {
+            // Food is sold and reported by dish: no stock to deduct.
+          } else if (selectedStockId && productVariants[p.id]) {
             const deduct = productVariants[p.id].deduct || 1
             const amount = deduct * qty
             setStockItems(prev => ({ ...prev, [selectedStockId]: Math.max(0, (prev[selectedStockId] ?? 0) - amount) }))
@@ -1134,11 +1141,17 @@ export default function App() {
             return (
               sameProduct &&
               (i.selectedStockId ?? null) === (selectedStockId ?? null) &&
-              (i.selectedMixerId ?? null) === (selectedMixerId ?? null)
+              (i.selectedMixerId ?? null) === (selectedMixerId ?? null) &&
+              lineSignature(i.options, i.note) === lineSignature(lineOptions, lineNote)
             )
           })
           if (ex) ex.qty += qty
-          else newItems.push({ name: itemName, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId, ...lineTaxFields(p) })
+          else newItems.push({
+            name: itemName, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId,
+            ...(lineOptions.length ? { options: lineOptions } : {}),
+            ...(lineNote ? { note: lineNote } : {}),
+            ...lineTaxFields(p),
+          })
         })
         updatedTab = { ...tab, items: newItems }
         return updatedTab
@@ -1191,7 +1204,7 @@ export default function App() {
     const total = getOrderTotal(order, products)
     items.forEach(i => {
       const p = products.find(x => x.id === i.productId || x.name === i.name)
-      if (p) {
+      if (p && p.group !== 'food') {
         if (i.selectedStockId && productVariants[p.id]) {
           const deduct = productVariants[p.id].deduct || 1
           const amount = deduct * i.qty
@@ -1237,7 +1250,7 @@ export default function App() {
         if (tx.id !== txId || tx.voided) return tx
         tx.items.forEach(i => {
           const p = products.find(x => x.id === i.productId || x.name === i.name)
-          if (p) {
+          if (p && p.group !== 'food') {
             if (i.selectedStockId && productVariants[p.id]) {
               const deduct = productVariants[p.id].deduct || 1
               const amount = deduct * i.qty
@@ -1271,6 +1284,8 @@ export default function App() {
       const selectedStockId = typeof line === 'object' ? line?.selectedStockId : null
       const selectedMixerId = typeof line === 'object' ? line?.selectedMixerId : null
       const displayName = typeof line === 'object' ? line?.displayName : null
+      const lineOptions = typeof line === 'object' ? line?.options : undefined
+      const lineNote = typeof line === 'object' ? line?.note : undefined
       const existing = acc[id]
       const existingQty = typeof existing === 'number' ? existing : (existing?.qty || 0)
       const mergedStockId = selectedStockId || (typeof existing === 'object' ? existing?.selectedStockId : null) || null
@@ -1285,6 +1300,8 @@ export default function App() {
           selectedStockId: mergedStockId,
           selectedMixerId: selectedMixerId || (typeof existing === 'object' ? existing?.selectedMixerId : null) || null,
           displayName: mergedDisplayName,
+          ...(lineOptions?.length ? { options: lineOptions } : {}),
+          ...(lineNote ? { note: lineNote } : {}),
         },
       }
     }, { ...tabOrder })
@@ -1423,6 +1440,30 @@ export default function App() {
     }
     showToast('Stock item deleted')
   }, [productVariants, setStockDefinitions, setStockItems, setProductVariants, showToast])
+
+  const saveOptionGroup = useCallback((group) => {
+    const clean = {
+      id: group.id || 'og_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: String(group.name || '').trim(),
+      required: group.required !== false,
+      choices: (group.choices || []).map(c => String(c).trim()).filter(Boolean),
+    }
+    if (!clean.name || !clean.choices.length) return null
+    setOptionGroups(prev => {
+      const exists = prev.some(g => g.id === clean.id)
+      const next = exists ? prev.map(g => (g.id === clean.id ? clean : g)) : [...prev, clean]
+      return next.sort((a, b) => a.name.localeCompare(b.name))
+    })
+    sendMenuOp('option_group', clean)
+    showToast('Option group saved')
+    return clean
+  }, [setOptionGroups, showToast])
+
+  const deleteOptionGroup = useCallback((id) => {
+    setOptionGroups(prev => prev.filter(g => g.id !== id))
+    sendMenuOp('option_group_delete', { id })
+    showToast('Option group deleted')
+  }, [setOptionGroups, showToast])
 
   const saveCategory = useCallback((type, rawName) => {
     const name = String(rawName || '').trim()
@@ -1606,6 +1647,7 @@ export default function App() {
     saveProduct, deleteProduct,
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
+    optionGroups, saveOptionGroup, deleteOptionGroup,
     showToast,
   }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString } from '../utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText } from '../utils'
+import { features } from '../features'
 import { supabase } from '../supabase'
 import { logSupabaseWrite } from '../supabaseWriteLog'
 import { enqueueSyncQueueItem, isLikelyNetworkFailure } from '../syncQueue'
@@ -19,7 +20,7 @@ export default function Till({
   products, productVariants, stock, stockItems, stockDefinitions, mixerStockIds, tillCategories,
   orders, updateOrder, clearOrder, activeOrderKey, switchOrder,
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
-  processCharge, showToast, currentStaff, settleTab,
+  processCharge, showToast, currentStaff, settleTab, optionGroups = [],
 }) {
   const [hiddenCats, setHiddenCats] = useState(() => {
     const list = tillCategories?.length ? [...tillCategories] : [...CATEGORIES]
@@ -111,7 +112,7 @@ export default function Till({
     }
   }
 
-  const lowItems = products.filter(p => {
+  const lowItems = products.filter(p => p.group !== 'food').filter(p => {
     const variantStatus = getVariantStatus(p)
     if (variantStatus) return variantStatus.isLow
     const s = stock[p.id] ?? 0
@@ -121,7 +122,7 @@ export default function Till({
     }
     return s > 0 && s <= 5
   }).map(p => p.name)
-  const outItems = products.filter(p => {
+  const outItems = products.filter(p => p.group !== 'food').filter(p => {
     const variantStatus = getVariantStatus(p)
     if (variantStatus) return variantStatus.isOut
     const s = stock[p.id] ?? 0
@@ -165,6 +166,13 @@ export default function Till({
     })
     setMixerSheet({ productId, spiritStockId, options })
   }
+
+  /** Option groups (e.g. steak cooking) assigned to a dish. POS build only. */
+  const optionGroupsFor = (product) => (
+    features.foodOptions && Array.isArray(product?.optionGroupIds)
+      ? product.optionGroupIds.map(gid => optionGroups.find(g => g.id === gid)).filter(Boolean)
+      : []
+  )
 
   const openNumpad = (productId) => {
     const variant = productVariants[productId]
@@ -249,7 +257,19 @@ export default function Till({
         showToast('Not enough stock for selection')
         return
       }
-    } else if (portionsAvailable < 1) return
+    } else if (product.group !== 'food' && portionsAvailable < 1) return
+
+    const itemGroups = optionGroupsFor(product)
+    const missing = itemGroups.find(g => g.required && !numpad.options?.[g.id])
+    if (missing) {
+      showToast('Choose: ' + missing.name)
+      return
+    }
+    const chosenOptions = itemGroups
+      .filter(g => numpad.options?.[g.id])
+      .map(g => ({ group: g.name, choice: numpad.options[g.id] }))
+    const lineNote = (numpad.note || '').trim()
+    const lineKey = orderLineKey(id, chosenOptions, lineNote)
 
     if (numpad.selectedMixerId) {
       const mixItem = stockItemById[numpad.selectedMixerId]
@@ -264,7 +284,7 @@ export default function Till({
     }
 
     updateOrder(activeOrderKey, prev => {
-      const existing = prev[id]
+      const existing = prev[lineKey]
       const existingQty = typeof existing === 'number' ? existing : (existing?.qty || 0)
       const selectedStockId = numpad.selectedStockId ?? (typeof existing === 'object' ? existing?.selectedStockId : null)
       const selectedMixerId = numpad.selectedMixerId ?? (typeof existing === 'object' ? existing?.selectedMixerId : null)
@@ -273,20 +293,31 @@ export default function Till({
         ?? variantDisplayName(selectedStockId)
         ?? (typeof existing === 'object' ? existing?.displayName : null)
         ?? null
-      return { ...prev, [id]: { qty: existingQty + qty, selectedStockId, selectedMixerId, displayName } }
+      return {
+        ...prev,
+        [lineKey]: {
+          qty: existingQty + qty,
+          selectedStockId,
+          selectedMixerId,
+          displayName,
+          ...(chosenOptions.length ? { options: chosenOptions } : {}),
+          ...(lineNote ? { note: lineNote } : {}),
+        },
+      }
     })
     setNumpad(null)
     showToast(`Added ${qty}× ${product.name}`)
   }
 
-  const changeQty = (id, delta) => {
-    const line = order[id]
+  const changeQty = (lineKey, delta) => {
+    const id = lineProductId(lineKey)
+    const line = order[lineKey]
     const existingQty = typeof line === 'number' ? line : (line?.qty || 0)
     const qty = existingQty + delta
     if (qty <= 0) {
       updateOrder(activeOrderKey, prev => {
         const n = { ...prev }
-        delete n[id]
+        delete n[lineKey]
         return n
       })
       return
@@ -315,11 +346,13 @@ export default function Till({
       }
     }
     updateOrder(activeOrderKey, prev => {
-      const prevLine = prev[id]
+      const prevLine = prev[lineKey]
       const selectedStockId = typeof prevLine === 'object' ? prevLine?.selectedStockId : null
       const selectedMixerId = typeof prevLine === 'object' ? prevLine?.selectedMixerId : null
       const displayName = typeof prevLine === 'object' ? prevLine?.displayName : null
-      return { ...prev, [id]: { qty, selectedStockId, selectedMixerId, displayName } }
+      const keepOptions = typeof prevLine === 'object' && prevLine?.options?.length ? { options: prevLine.options } : {}
+      const keepNote = typeof prevLine === 'object' && prevLine?.note ? { note: prevLine.note } : {}
+      return { ...prev, [lineKey]: { qty, selectedStockId, selectedMixerId, displayName, ...keepOptions, ...keepNote } }
     })
   }
 
@@ -433,13 +466,15 @@ export default function Till({
   const buildBarOrderItemsFromPanel = () => {
     const lines = []
     for (const [id, line] of Object.entries(order)) {
-      const p = products.find(x => x.id === Number(id))
+      const p = products.find(x => x.id === lineProductId(id))
       if (!p) continue
       const qty = typeof line === 'number' ? line : (line?.qty || 0)
       const mixerId = typeof line === 'object' ? line?.selectedMixerId : null
       const mixerLine = mixerId ? mixerChoiceLabel(stockItemById[mixerId]?.name) : null
       let name = orderLineLabel(line, p.name)
       if (mixerLine) name = `${name} (${mixerLine})`
+      const detail = lineDetailText(line)
+      if (detail) name = `${name} (${detail})`
       lines.push({ name, qty, price: Number(p.price) })
     }
     return lines
@@ -611,8 +646,9 @@ export default function Till({
                 const variantStatus = getVariantStatus(p)
                 const s = stock[p.id] ?? 0
                 const portionsAvailable = p.bottleYield ? Math.floor(s * p.bottleYield) : s
-                const isOut = variantStatus ? variantStatus.isOut : (p.bottleYield ? portionsAvailable < 1 : s === 0)
-                const isLow = variantStatus ? variantStatus.isLow : (p.bottleYield ? portionsAvailable > 0 && portionsAvailable <= 5 : s > 0 && s <= 5)
+                const isFood = p.group === 'food'
+                const isOut = isFood ? false : variantStatus ? variantStatus.isOut : (p.bottleYield ? portionsAvailable < 1 : s === 0)
+                const isLow = isFood ? false : variantStatus ? variantStatus.isLow : (p.bottleYield ? portionsAvailable > 0 && portionsAvailable <= 5 : s > 0 && s <= 5)
                 const portionLabel = p.bottleYield ? getPortionLabel(p) : null
                 return (
                   <button
@@ -624,7 +660,7 @@ export default function Till({
                   >
                     <div className={styles.prodName}>{p.name}</div>
                     <div className={styles.prodPrice}>{fmt(p.price)}</div>
-                    <div className={`${styles.prodStock} ${isLow ? styles.stockLow : ''}`}>
+                    {!isFood && <div className={`${styles.prodStock} ${isLow ? styles.stockLow : ''}`}>
                       {isOut
                         ? 'Out of stock'
                         : variantStatus
@@ -634,7 +670,7 @@ export default function Till({
                             : isLow
                               ? `Low — ${s} left`
                               : `${s} in stock`}
-                    </div>
+                    </div>}
                   </button>
                 )
               })}
@@ -672,8 +708,9 @@ export default function Till({
             Object.entries(order).map(([id, line]) => {
               const qty = typeof line === 'number' ? line : (line?.qty || 0)
               const mixerId = typeof line === 'object' ? line?.selectedMixerId : null
-              const p = products.find(x => x.id === Number(id))
+              const p = products.find(x => x.id === lineProductId(id))
               if (!p) return null
+              const detailLine = lineDetailText(line)
               const mixerLine = mixerId ? mixerChoiceLabel(stockItemById[mixerId]?.name) : null
               return (
                 <div key={id} className={styles.orderItem}>
@@ -682,12 +719,15 @@ export default function Till({
                     {mixerLine && (
                       <div className={styles.oiUnit}>{mixerLine}</div>
                     )}
+                    {detailLine && (
+                      <div className={styles.oiUnit}>{detailLine}</div>
+                    )}
                     <div className={styles.oiUnit}>{fmt(p.price)} each</div>
                   </div>
                   <div className={styles.oiControls}>
-                    <button className={styles.qtyBtn} onClick={() => changeQty(Number(id), -1)}>−</button>
+                    <button className={styles.qtyBtn} onClick={() => changeQty(id, -1)}>−</button>
                     <span className={styles.oiQty}>{qty}</span>
-                    <button className={styles.qtyBtn} onClick={() => changeQty(Number(id), 1)}>+</button>
+                    <button className={styles.qtyBtn} onClick={() => changeQty(id, 1)}>+</button>
                     <span className={styles.oiSub}>{fmt(p.price * qty)}</span>
                   </div>
                 </div>
@@ -797,10 +837,51 @@ export default function Till({
       {/* Numpad overlay */}
       {numpad && (
         <div className={styles.overlay} onClick={() => setNumpad(null)}>
-          <div className={styles.sheet} onClick={e => e.stopPropagation()}>
+          <div className={styles.sheet} style={{ maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div className={styles.numpadProduct}>
               {products.find(p => p.id === numpad.productId)?.name} — {fmt(products.find(p => p.id === numpad.productId)?.price)} each
             </div>
+            {(() => {
+              const np = products.find(p => p.id === numpad.productId)
+              const groups = optionGroupsFor(np)
+              if (!features.foodOptions) return null
+              return (
+                <div className={styles.optionsBlock}>
+                  {groups.map(g => (
+                    <div key={g.id} className={styles.optGroup}>
+                      <div className={styles.optLabel}>{g.name}{g.required ? ' *' : ' (optional)'}</div>
+                      <div className={styles.optChips}>
+                        {g.choices.map(c => {
+                          const on = numpad.options?.[g.id] === c
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              className={`${styles.optChip} ${on ? styles.optChipOn : ''}`}
+                              onClick={() => setNumpad(prev => ({
+                                ...prev,
+                                options: { ...(prev.options || {}), [g.id]: on && !g.required ? undefined : c },
+                              }))}
+                            >
+                              {c}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  <input
+                    className={styles.optNote}
+                    type="text"
+                    maxLength={120}
+                    placeholder="Note (e.g. sauce on side)"
+                    value={numpad.note || ''}
+                    onChange={e => setNumpad(prev => ({ ...prev, note: e.target.value }))}
+                    aria-label="Note for this item"
+                  />
+                </div>
+              )
+            })()}
             <div className={styles.numpadQtyRow}>
               <button type="button" className={styles.numpadQtyMinus} onClick={npDecQty} aria-label="Decrease quantity">−</button>
               <div className={styles.numpadDisplay}>{parseInt(numpad.value, 10) || 1}</div>
@@ -898,7 +979,7 @@ export default function Till({
             <div className={styles.sheetTitle}>Confirm charge</div>
             <div className={styles.sheetAmount}>{fmt(total)}</div>
             <div className={styles.sheetItems}>
-              {orderToItems(order, products).map(i => `${i.qty}× ${i.name}`).join('\n')}
+              {orderToItems(order, products).map(saleLineText).join('\n')}
             </div>
             <div className={styles.sheetPayLabel}>Payment method</div>
             <div className={styles.sheetPayRow}>
@@ -964,7 +1045,7 @@ export default function Till({
             <div className={styles.sheetAmount}>{fmt(settleModalTotal)}</div>
             <div className={styles.sheetItems}>
               {settleTabForModal.items.length
-                ? settleTabForModal.items.map((i) => `${i.qty}× ${i.name}`).join('\n')
+                ? settleTabForModal.items.map(saleLineText).join('\n')
                 : 'No items'}
             </div>
             <div className={styles.sheetPayLabel}>Payment method</div>

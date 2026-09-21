@@ -20,4 +20,6 @@ export const features = {
   // Manager-only Reports view (sales inc/ex VAT, food/drink, by item/time, stock levels).
   // On in both builds for now so it can be tried on the events Till; set to isPosMode to make it POS-only.
   reports: true,
+  // Dish options (e.g. steak cooking, chips or saute) and per-item notes. POS only.
+  foodOptions: isPosMode,
 }

@@ -708,3 +708,12 @@
     margin: auto;
   }
 }
+
+/* Dish options and note (POS) */
+.optionsBlock { margin-bottom: 12px; }
+.optGroup { margin-bottom: 10px; }
+.optLabel { font-size: 12px; font-weight: 700; color: var(--navy); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+.optChips { display: flex; flex-wrap: wrap; gap: 6px; }
+.optChip { padding: 9px 13px; border-radius: 18px; border: 1px solid var(--border); background: var(--white); font-size: 14px; color: var(--text); }
+.optChipOn { background: var(--accent); border-color: var(--accent-dark); font-weight: 700; }
+.optNote { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; margin-top: 4px; }

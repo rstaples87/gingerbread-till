@@ -17,6 +17,7 @@ const blankProductForm = {
   categoryDraft: '',
   vatRate: 20,
   group: 'drink',
+  optionGroupIds: [],
   variantType: 'none',
   label: '',
   stockIds: [],
@@ -68,6 +69,7 @@ function productToForm(product, variant, defaultMixerIds) {
     categoryDraft: '',
     vatRate: product.vatRate ?? 20,
     group: product.group === 'food' ? 'food' : 'drink',
+    optionGroupIds: Array.isArray(product.optionGroupIds) ? product.optionGroupIds : [],
     variantType: getVariantType(variant),
     label: variant?.label || '',
     stockIds: mainStockIds,
@@ -164,6 +166,9 @@ export default function Settings({
   deleteStockDefinition,
   saveCategory,
   venueAuth,
+  optionGroups = [],
+  saveOptionGroup,
+  deleteOptionGroup,
 }) {
   const [tab, setTab] = useState('products')
   const [productForm, setProductForm] = useState(null)
@@ -203,6 +208,7 @@ export default function Settings({
       stock: productForm.originalProduct?.stock ?? 0,
       vatRate: Number(productForm.vatRate ?? 20),
       group: productForm.group === 'food' ? 'food' : 'drink',
+      ...(features.foodOptions ? { optionGroupIds: productForm.optionGroupIds || [] } : {}),
     }
     if (!product.name || !product.category || Number.isNaN(product.price)) return
     if (Number.isNaN(product.vatRate) || product.vatRate < 0 || product.vatRate > 100) return
@@ -282,6 +288,26 @@ export default function Settings({
     deleteStockDefinition(item.id)
   }
 
+  const [groupForm, setGroupForm] = useState(null) // { id?, name, required, choicesText }
+
+  const EXAMPLE_GROUPS = [
+    { name: 'Steak cooking', required: true, choicesText: 'Rare\nMedium rare\nMedium\nMedium well\nWell done' },
+    { name: 'Chips or sauté', required: true, choicesText: 'Chips\nSauté' },
+  ]
+
+  const openNewGroup = () => setGroupForm({ id: null, name: '', required: true, choicesText: '' })
+  const openEditGroup = (g) => setGroupForm({ id: g.id, name: g.name, required: g.required !== false, choicesText: (g.choices || []).join('\n') })
+  const submitGroup = (event) => {
+    event.preventDefault()
+    const saved = saveOptionGroup({
+      id: groupForm.id,
+      name: groupForm.name,
+      required: groupForm.required,
+      choices: groupForm.choicesText.split('\n'),
+    })
+    if (saved) setGroupForm(null)
+  }
+
   return (
     <div className={styles.wrap}>
       <div className={styles.scroll}>
@@ -310,7 +336,44 @@ export default function Settings({
           >
             Stock Items
           </button>
+          {features.foodOptions && (
+            <button
+              type="button"
+              className={`${styles.topTab} ${tab === 'options' ? styles.topTabActive : ''}`}
+              onClick={() => setTab('options')}
+            >
+              Dish Options
+            </button>
+          )}
         </div>
+
+        {features.foodOptions && tab === 'options' && (
+          <>
+            <button type="button" className={styles.primaryBtn} onClick={openNewGroup}>Add option group</button>
+            <div className={styles.meta} style={{ margin: '8px 0' }}>
+              An option group is a set of choices a dish asks for, e.g. steak cooking. Create it once, then tick it on each dish that needs it (Till Products → Edit).
+            </div>
+            {optionGroups.map(g => (
+              <div key={g.id} className={styles.row}>
+                <div className={styles.rowInfo}>
+                  <div className={styles.name}>{g.name} {g.required ? '(required)' : '(optional)'}</div>
+                  <div className={styles.meta}>{(g.choices || []).join(', ')}</div>
+                </div>
+                <div className={styles.rowActions}>
+                  <button type="button" className={styles.secondaryBtn} onClick={() => openEditGroup(g)}>Edit</button>
+                  <button
+                    type="button"
+                    className={styles.dangerBtn}
+                    onClick={() => { if (confirm(`Delete ${g.name}? Dishes using it will stop asking for it.`)) deleteOptionGroup(g.id) }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!optionGroups.length && <div className={styles.meta}>No option groups yet.</div>}
+          </>
+        )}
 
         {tab === 'products' && (
           <>
@@ -375,6 +438,38 @@ export default function Settings({
         )}
       </div>
 
+      {groupForm && (
+        <div className={styles.overlay} onClick={() => setGroupForm(null)}>
+          <form className={styles.sheet} onSubmit={submitGroup} onClick={event => event.stopPropagation()}>
+            <h2>{groupForm.id ? 'Edit option group' : 'Add option group'}</h2>
+            {!groupForm.id && (
+              <div className={styles.meta} style={{ marginBottom: 8 }}>
+                Examples:{' '}
+                {EXAMPLE_GROUPS.map(ex => (
+                  <button key={ex.name} type="button" className={styles.secondaryBtn} style={{ marginRight: 6 }} onClick={() => setGroupForm(f => ({ ...f, ...ex }))}>
+                    {ex.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <label className={styles.field}>
+              <span>Name</span>
+              <input value={groupForm.name} onChange={event => setGroupForm(f => ({ ...f, name: event.target.value }))} placeholder="e.g. Steak cooking" />
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '6px 0' }}>
+              <input type="checkbox" style={{ width: 'auto', margin: 0 }} checked={groupForm.required} onChange={event => setGroupForm(f => ({ ...f, required: event.target.checked }))} />
+              Must choose one (required)
+            </label>
+            <label className={styles.field}>
+              <span>Choices (one per line)</span>
+              <textarea rows={6} value={groupForm.choicesText} onChange={event => setGroupForm(f => ({ ...f, choicesText: event.target.value }))} />
+            </label>
+            <button type="submit" className={styles.primaryBtn}>Save</button>
+            <button type="button" className={styles.secondaryBtn} onClick={() => setGroupForm(null)}>Cancel</button>
+          </form>
+        </div>
+      )}
+
       {productForm && (
         <div className={styles.overlay} onClick={() => setProductForm(null)}>
           <form className={styles.sheet} onSubmit={submitProduct} onClick={event => event.stopPropagation()}>
@@ -421,6 +516,27 @@ export default function Settings({
                   </select>
                 </label>
               </>
+            )}
+            {features.foodOptions && optionGroups.length > 0 && (
+              <div className={styles.field}>
+                <span>Dish options (asked when the dish is added)</span>
+                {optionGroups.map(g => (
+                  <label key={g.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0' }}>
+                    <input
+                      type="checkbox"
+                      style={{ width: 'auto', margin: 0 }}
+                      checked={(productForm.optionGroupIds || []).includes(g.id)}
+                      onChange={event => setProductForm(form => ({
+                        ...form,
+                        optionGroupIds: event.target.checked
+                          ? [...(form.optionGroupIds || []), g.id]
+                          : (form.optionGroupIds || []).filter(x => x !== g.id),
+                      }))}
+                    />
+                    {g.name}
+                  </label>
+                ))}
+              </div>
             )}
             <label className={styles.field}>
               <span>Variant type</span>

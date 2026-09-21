@@ -1,4 +1,4 @@
-import { fmt } from '../utils'
+import { fmt, saleLineText } from '../utils'
 import styles from './Sales.module.css'
 
 function formatDiscrepancyDisplay(amount) {
@@ -188,7 +188,7 @@ export default function EndOfNightReportBody({
               <span>
                 {new Date(t.time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                 {' — '}
-                {t.items.map(i => `${i.qty}× ${i.name}`).join(', ')}
+                {t.items.map(saleLineText).join(', ')}
               </span>
               <span>{fmt(t.total)}</span>
             </div>

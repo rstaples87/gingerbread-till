@@ -51,9 +51,36 @@ const getLineDisplayName = (line) => (typeof line === 'object' ? line?.displayNa
 /** Panel/receipt label: variant display name when set, else product name */
 export const orderLineLabel = (line, productName) => getLineDisplayName(line) || productName
 
+/**
+ * Order lines are keyed by product id. A line that carries dish options or a note gets its own key,
+ * "<productId>~<signature>", so two steaks cooked differently stay separate lines.
+ */
+export const lineProductId = key => parseInt(String(key), 10)
+
+const slug = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+
+/** Same options + same note => same signature (identical lines merge). options: [{ group, choice }] */
+export function lineSignature(options, note) {
+  const opts = (options || []).map(o => slug(o.group) + ':' + slug(o.choice)).join('|')
+  const n = slug(note)
+  return [opts, n ? 'n:' + n : ''].filter(Boolean).join('|')
+}
+
+export function orderLineKey(productId, options, note) {
+  const sig = lineSignature(options, note)
+  return sig ? productId + '~' + sig : String(productId)
+}
+
+/** "Medium rare, Chips — “sauce on side”" for an order line or a sale line. */
+export function lineDetailText(line) {
+  if (!line || typeof line !== 'object') return ''
+  const opts = (line.options || []).map(o => o.choice).join(', ')
+  return [opts, line.note ? '“' + line.note + '”' : ''].filter(Boolean).join(' — ')
+}
+
 export const getOrderTotal = (order, products) =>
   Object.entries(order).reduce((sum, [id, line]) => {
-    const p = products.find(x => x.id === Number(id))
+    const p = products.find(x => x.id === lineProductId(id))
     const qty = getLineQty(line)
     return sum + (p ? p.price * qty : 0)
   }, 0)
@@ -67,7 +94,7 @@ export const lineTaxFields = (p) => ({
 
 export const orderToItems = (order, products) =>
   Object.entries(order).map(([id, line]) => {
-    const p = products.find(x => x.id === Number(id))
+    const p = products.find(x => x.id === lineProductId(id))
     if (!p) return null
     return {
       productId: p.id,
@@ -77,6 +104,8 @@ export const orderToItems = (order, products) =>
       selectedStockId: getLineStockId(line),
       selectedMixerId: getLineMixerId(line),
       displayName: getLineDisplayName(line) || undefined,
+      ...(typeof line === 'object' && line?.options?.length ? { options: line.options } : {}),
+      ...(typeof line === 'object' && line?.note ? { note: line.note } : {}),
       ...lineTaxFields(p),
     }
   }).filter(Boolean)
@@ -85,4 +114,13 @@ export const tabTotal = tab =>
   tab.items.reduce((s, i) => s + i.price * i.qty, 0)
 
 export const itemsText = items =>
-  items.map(i => `${i.qty}× ${i.name}`).join('\n')
+  items.map(i => {
+    const detail = lineDetailText(i)
+    return `${i.qty}× ${i.name}${detail ? ' (' + detail + ')' : ''}`
+  }).join('\n')
+
+/** One-line text for a sale line, used in sales lists: "2× Sirloin (Medium rare, Chips — “sauce on side”)". */
+export const saleLineText = i => {
+  const detail = lineDetailText(i)
+  return `${i.qty}× ${i.name}${detail ? ' (' + detail + ')' : ''}`
+}

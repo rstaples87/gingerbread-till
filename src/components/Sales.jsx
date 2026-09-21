@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { flushSync } from 'react-dom'
-import { fmt, mixerBottleDeductionForLine, formatStockItemQuantity, localSessionDateString } from '../utils'
+import { fmt, mixerBottleDeductionForLine, formatStockItemQuantity, localSessionDateString, saleLineText } from '../utils'
 import { buildEodReportData } from '../eodReports'
 import { persistEodReportEntryRemote } from '../eodReportsSupabase'
 import { todaySessionDateForSupabase } from '../transactionSync'
@@ -108,7 +108,7 @@ function PastReportTransactions({ sessionDate, savedTransactionIds, visibleStaff
               {tx.voided && <span className={`${s.badge} ${s.badgeVoid}`}>Voided</span>}
             </div>
             <div className={`${s.txDetail} ${tx.voided ? s.txDetailVoided : ''}`}>
-              {tx.items.map(i => `${i.qty}× ${i.name}`).join(', ')}
+              {tx.items.map(saleLineText).join(', ')}
               {tx.payment === 'cash' && typeof tx.changeGiven === 'number' && (
                 <span className={s.txNote}> · Change: {fmt(tx.changeGiven)}</span>
               )}
@@ -504,7 +504,7 @@ export default function Sales({
                     )}
                   </div>
                   <div className={styles.txDetail}>
-                    {tx.items.map(i => `${i.qty}× ${i.name}`).join(', ')}
+                    {tx.items.map(saleLineText).join(', ')}
                     {tx.payment === 'cash' && typeof tx.changeGiven === 'number' && (
                       <span className={styles.txNote}> · Change: {fmt(tx.changeGiven)}</span>
                     )}
@@ -730,7 +730,7 @@ export default function Sales({
                   <div className={styles.reportCategoryHeading} style={{ marginTop: 10 }}>Voided transactions</div>
                   {voidedTx.map(t => (
                     <div key={t.id} className={`${styles.reportRow} ${styles.reportVoided}`}>
-                      <span>{new Date(t.time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} — {t.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</span>
+                      <span>{new Date(t.time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} — {t.items.map(saleLineText).join(', ')}</span>
                       <span>{fmt(t.total)}</span>
                     </div>
                   ))}
