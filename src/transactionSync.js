@@ -148,3 +148,23 @@ export function dedupeTransactionsById(transactions) {
 export function mergeTransactionsDeduped(...lists) {
   return dedupeTransactionsById(lists.flat())
 }
+
+/** All transactions for trading days from..to (YYYY-MM-DD, inclusive). Pages through results (Supabase caps a request at 1000 rows). */
+export async function fetchTransactionsForRange(fromDate, toDate) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const pageSize = 1000
+  const all = []
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .gte('session_date', fromDate)
+      .lte('session_date', toDate)
+      .order('time', { ascending: true })
+      .range(start, start + pageSize - 1)
+    if (error) throw error
+    all.push(...(data ?? []))
+    if (!data || data.length < pageSize) break
+  }
+  return all.map(row => normaliseTransactionRowLive(row)).filter(Boolean)
+}

@@ -14,6 +14,8 @@ import { supabase, isSupabaseConfigured } from './supabase'
 import { useVenueAuth, signOutVenue } from './auth'
 import VenueSignIn from './components/VenueSignIn'
 import ManagerGate from './components/ManagerGate'
+import Reports from './components/Reports'
+import { features } from './features'
 import { logSupabaseWrite } from './supabaseWriteLog'
 import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields } from './utils'
 import Header from './components/Header'
@@ -1617,6 +1619,11 @@ export default function App() {
       {view === 'sales' && (
         <ManagerGate unlocked={managerUnlocked} verifyPin={verifyManagerPin} onUnlock={unlockManager} title="Manager PIN: Sales and close till">
           <Sales {...sharedProps} />
+        </ManagerGate>
+      )}
+      {features.reports && view === 'reports' && (
+        <ManagerGate unlocked={managerUnlocked} verifyPin={verifyManagerPin} onUnlock={unlockManager} title="Manager PIN: Reports">
+          <Reports {...sharedProps} />
         </ManagerGate>
       )}
       {view === 'settings' && (

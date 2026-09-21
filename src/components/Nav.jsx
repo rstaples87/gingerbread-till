@@ -1,4 +1,5 @@
 import styles from './Nav.module.css'
+import { features } from '../features'
 
 export default function Nav({ view, setView, openTabsCount }) {
   const tabs = [
@@ -8,6 +9,7 @@ export default function Nav({ view, setView, openTabsCount }) {
     { key: 'stock', label: 'Stock' },
     { key: 'staff', label: 'Staff' },
     { key: 'sales', label: 'Sales' },
+    ...(features.reports ? [{ key: 'reports', label: 'Reports' }] : []),
     { key: 'settings', label: 'Settings' },
   ]
   return (

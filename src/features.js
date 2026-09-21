@@ -10,4 +10,7 @@ export const features = {
   // VAT rate and food/drink group are always recorded on sales (defaults: 20%, drink);
   // only the editor fields for changing them are POS-only.
   taxFieldsInProductEditor: isPosMode,
+  // Manager-only Reports view (sales inc/ex VAT, food/drink, by item/time, stock levels).
+  // On in both builds for now so it can be tried on the events Till; set to isPosMode to make it POS-only.
+  reports: true,
 }
