@@ -49,7 +49,13 @@ export function isLikelyNetworkFailure(err) {
 export function isAuthTokenFailure(err) {
   if (!err) return false
   const msg = String(err.message ?? err).toLowerCase()
-  return err.code === 'PGRST301' || msg.includes('jwt expired') || msg.includes('invalid jwt')
+  return (
+    err.code === 'PGRST301' ||
+    err.code === '42501' ||
+    msg.includes('jwt expired') ||
+    msg.includes('invalid jwt') ||
+    msg.includes('row-level security')
+  )
 }
 
 export function maybeQueueSyncFailure(type, payload, err) {

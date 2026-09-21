@@ -52,7 +52,7 @@ export default function VenueSignIn({ onDone, onSkip }) {
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
         <button className={styles.skip} type="button" onClick={onSkip}>
-          Skip for now
+          Continue without signing in (sales wait to sync)
         </button>
       </form>
     </div>
