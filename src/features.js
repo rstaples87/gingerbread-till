@@ -22,4 +22,6 @@ export const features = {
   reports: true,
   // Dish options (e.g. steak cooking, chips or saute) and per-item notes. POS only.
   foodOptions: isPosMode,
+  // Table plan (areas, numbered tables, covers). POS only.
+  tables: isPosMode,
 }

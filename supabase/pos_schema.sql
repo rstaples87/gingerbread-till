@@ -187,3 +187,47 @@ begin
     alter publication supabase_realtime add table public.menu_option_groups;
   end if;
 end $$;
+
+-- Table plan and covers (added 2026-09-21).
+create table if not exists public.floor_areas (
+  id text not null primary key,
+  name text not null,
+  sort integer not null default 0
+);
+create table if not exists public.floor_tables (
+  id text not null primary key,
+  area_id text not null,
+  name text not null,
+  seats integer,
+  sort integer not null default 0
+);
+alter table public.tabs add column if not exists table_id text;
+alter table public.tabs add column if not exists covers integer;
+alter table public.transactions add column if not exists covers integer;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['floor_areas','floor_tables']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists "venue_signed_in" on public.%I', t);
+    execute format('create policy "venue_signed_in" on public.%I for all to authenticated using (true) with check (true)', t);
+    execute format('alter table public.%I replica identity full', t);
+    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
+-- Haywain layout seed: areas The Haywain (1-14), The Hop Room (15-39), The Milling Room (2 tables), Garden (empty).
+insert into public.floor_areas (id, name, sort) values
+  ('area_haywain', 'The Haywain', 1), ('area_hop', 'The Hop Room', 2),
+  ('area_milling', 'The Milling Room', 3), ('area_garden', 'Garden', 4)
+on conflict (id) do nothing;
+insert into public.floor_tables (id, area_id, name, seats, sort)
+select 't_' || n, 'area_haywain', n::text, null, n from generate_series(1, 14) as n on conflict (id) do nothing;
+insert into public.floor_tables (id, area_id, name, seats, sort)
+select 't_' || n, 'area_hop', n::text, null, n from generate_series(15, 39) as n on conflict (id) do nothing;
+insert into public.floor_tables (id, area_id, name, seats, sort) values
+  ('t_milling_1', 'area_milling', 'Milling Room 1', 12, 1), ('t_milling_2', 'area_milling', 'Milling Room 2', 6, 2)
+on conflict (id) do nothing;

@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { flushSync } from 'react-dom'
 import { fmt, mixerBottleDeductionForLine, formatStockItemQuantity, localSessionDateString, saleLineText } from '../utils'
+import { features } from '../features'
 import { buildEodReportData } from '../eodReports'
 import { persistEodReportEntryRemote } from '../eodReportsSupabase'
 import { todaySessionDateForSupabase } from '../transactionSync'
@@ -210,7 +211,7 @@ export default function Sales({
   clearSessionTransactions,
   eodReports, setEodReports, refreshEodReports,
   voidTransaction, products,
-  stockItems, stockDefinitions, productVariants, showToast,
+  stockItems, stockDefinitions, productVariants, showToast, openTabs = [],
 }) {
   const [reportOpen, setReportOpen] = useState(false)
   const reportOpenRef = useRef(false)
@@ -552,6 +553,11 @@ export default function Sales({
           <div className={styles.confirmSheet} onClick={e => e.stopPropagation()}>
             <h2 className={styles.confirmTitle}>Save &amp; close till?</h2>
             <p className={styles.confirmMessage}>This will save the end of night report and all sales data for this session.</p>
+            {features.tables && openTabs.length > 0 && (
+              <p className={styles.confirmMessage} style={{ color: 'var(--red)', fontWeight: 600 }}>
+                Still open: {openTabs.map(t => t.name).join(', ')}. These are not settled and won't be in tonight's takings.
+              </p>
+            )}
             <div className={styles.confirmBtns}>
               <button type="button" className={styles.confirmCancelBtn} onClick={() => setCloseConfirmOpen(false)}>Cancel</button>
               <button type="button" className={styles.confirmSaveBtn} onClick={confirmCloseTill} disabled={closingTill}>Save &amp; close</button>

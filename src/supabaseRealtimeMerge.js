@@ -35,6 +35,7 @@ export function normaliseTransactionRowLive(row) {
     tenderedAmount: row.tendered_amount != null ? Number(row.tendered_amount) : undefined,
     changeGiven: row.change_given != null ? Number(row.change_given) : undefined,
     sessionDate: row.session_date ?? undefined,
+    covers: row.covers != null ? Number(row.covers) : undefined,
   }
 }
 
@@ -57,6 +58,8 @@ export function normaliseTabRowLive(row) {
     openedAt: new Date(row.opened_at ?? row.openedAt ?? Date.now()),
     staff: row.staff ?? row.staff_name ?? undefined,
     limit: lim != null && lim !== '' ? Number(lim) : undefined,
+    tableId: row.table_id ?? undefined,
+    covers: row.covers != null ? Number(row.covers) : undefined,
   }
 }
 

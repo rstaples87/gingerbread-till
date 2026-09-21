@@ -169,6 +169,14 @@ export default function Settings({
   optionGroups = [],
   saveOptionGroup,
   deleteOptionGroup,
+  floorAreas = [],
+  floorTables = [],
+  saveFloorArea,
+  deleteFloorArea,
+  saveFloorTable,
+  deleteFloorTable,
+  addFloorTableRange,
+  showToast,
 }) {
   const [tab, setTab] = useState('products')
   const [productForm, setProductForm] = useState(null)
@@ -345,7 +353,91 @@ export default function Settings({
               Dish Options
             </button>
           )}
+          {features.tables && (
+            <button
+              type="button"
+              className={`${styles.topTab} ${tab === 'tables' ? styles.topTabActive : ''}`}
+              onClick={() => setTab('tables')}
+            >
+              Tables
+            </button>
+          )}
         </div>
+
+        {features.tables && tab === 'tables' && (
+          <>
+            <button
+              type="button"
+              className={styles.primaryBtn}
+              onClick={() => {
+                const n = (window.prompt('Name for the new area?') || '').trim()
+                if (n) saveFloorArea({ name: n })
+              }}
+            >
+              Add area
+            </button>
+            <div className={styles.meta} style={{ margin: '8px 0' }}>
+              Areas and tables appear on the Tables screen. Use "Add several" to create numbered tables in one go.
+            </div>
+            {[...floorAreas].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map(area => {
+              const mine = floorTables
+                .filter(t => t.areaId === area.id)
+                .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || String(a.name).localeCompare(String(b.name), undefined, { numeric: true }))
+              const askSeats = (current) => {
+                const v = window.prompt('Seats (optional, leave blank if not needed)', current ?? '')
+                return v === null ? undefined : v.trim()
+              }
+              return (
+                <section key={area.id}>
+                  <div className={styles.groupTitle}>{area.name} ({mine.length} {mine.length === 1 ? 'table' : 'tables'})</div>
+                  <div className={styles.rowActions} style={{ flexWrap: 'wrap', margin: '4px 0 8px' }}>
+                    <button type="button" className={styles.secondaryBtn} onClick={() => {
+                      const n = (window.prompt('New name for this area?', area.name) || '').trim()
+                      if (n) saveFloorArea({ id: area.id, name: n })
+                    }}>Rename</button>
+                    <button type="button" className={styles.secondaryBtn} onClick={() => {
+                      const name = (window.prompt('Table name or number?') || '').trim()
+                      if (!name) return
+                      const seats = askSeats('')
+                      if (seats === undefined) return
+                      saveFloorTable({ areaId: area.id, name, seats })
+                    }}>Add table</button>
+                    <button type="button" className={styles.secondaryBtn} onClick={() => {
+                      const from = window.prompt('First table number?')
+                      if (from === null) return
+                      const to = window.prompt('Last table number?')
+                      if (to === null) return
+                      const seats = askSeats('')
+                      if (seats === undefined) return
+                      const n = addFloorTableRange(area.id, from, to, seats)
+                      showToast(n ? `${n} tables added` : 'No new tables added')
+                    }}>Add several</button>
+                    <button type="button" className={styles.dangerBtn} onClick={() => {
+                      if (window.confirm(`Delete ${area.name} and its ${mine.length} tables?`)) deleteFloorArea(area.id)
+                    }}>Delete area</button>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                    {mine.map(t => (
+                      <span key={t.id} style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'var(--white)' }}>
+                        <button type="button" style={{ border: 'none', background: 'none', padding: '6px 10px', fontSize: 13 }} onClick={() => {
+                          const name = (window.prompt('Table name or number?', t.name) || '').trim()
+                          if (!name) return
+                          const seats = askSeats(t.seats ?? '')
+                          if (seats === undefined) return
+                          saveFloorTable({ id: t.id, areaId: area.id, name, seats })
+                        }}>{t.name}{t.seats ? ` (${t.seats})` : ''}</button>
+                        <button type="button" aria-label={`Delete ${t.name}`} style={{ border: 'none', background: 'none', padding: '6px 8px', color: 'var(--red)' }} onClick={() => {
+                          if (window.confirm(`Delete ${t.name}?`)) deleteFloorTable(t.id)
+                        }}>×</button>
+                      </span>
+                    ))}
+                    {!mine.length && <span className={styles.meta}>No tables yet.</span>}
+                  </div>
+                </section>
+              )
+            })}
+          </>
+        )}
 
         {features.foodOptions && tab === 'options' && (
           <>

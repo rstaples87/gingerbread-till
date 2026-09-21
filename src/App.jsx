@@ -16,6 +16,7 @@ import { useVenueAuth, signOutVenue } from './auth'
 import VenueSignIn from './components/VenueSignIn'
 import ManagerGate from './components/ManagerGate'
 import Reports from './components/Reports'
+import Tables from './components/Tables'
 import { features, isPosMode } from './features'
 
 // The events Till starts from the built-in bar menu. The Haywain POS starts empty (its menu is entered in Settings),
@@ -372,6 +373,8 @@ async function loadMenuFromSupabase(setters, getLocal, { seed = false } = {}) {
   if (!menu) return false
   const local = getLocal()
   if (menu.optionGroups) setters.setOptionGroups(menu.optionGroups)
+  if (menu.floorAreas) setters.setFloorAreas(menu.floorAreas)
+  if (menu.floorTables) setters.setFloorTables(menu.floorTables)
   if (seed) {
     const seedProducts = menu.products.length === 0 && local.products.length > 0
     const seedStock = menu.stockDefinitions.length === 0 && local.stockDefinitions.length > 0
@@ -418,6 +421,9 @@ function tabRowForSupabase(tab) {
   if (tab.limit != null && tab.limit !== '') {
     row.tab_limit = Number(tab.limit)
   }
+  // Table and covers exist only in the POS database.
+  if (tab.tableId) row.table_id = tab.tableId
+  if (tab.covers != null) row.covers = Number(tab.covers)
   return row
 }
 
@@ -577,6 +583,8 @@ export default function App() {
   const [productVariants, setProductVariants] = useLocalStorage('bt_product_variants', INITIAL_PRODUCT_VARIANTS)
   const [stockDefinitions, setStockDefinitions] = useLocalStorage('bt_stock_definitions', INITIAL_STOCK_ITEMS)
   const [optionGroups, setOptionGroups] = useLocalStorage('bt_option_groups', [])
+  const [floorAreas, setFloorAreas] = useLocalStorage('bt_floor_areas', [])
+  const [floorTables, setFloorTables] = useLocalStorage('bt_floor_tables', [])
   const [categoryState, setCategoryState] = useLocalStorage('bt_categories', { till: [], stock: [] })
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
@@ -627,7 +635,7 @@ export default function App() {
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const [eodReports, setEodReports] = useState([])
   const menuSettersRef = useRef({})
-  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState, setOptionGroups }
+  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState, setOptionGroups, setFloorAreas, setFloorTables }
   const menuLocalRef = useRef({})
   menuLocalRef.current = { products, productVariants, stockDefinitions, categoryState }
   const tabsLoadSettersRef = useRef({ setOpenTabs, setOrders, setTabIdCounter })
@@ -854,6 +862,10 @@ export default function App() {
     subscribeTable('till_realtime_menu_products', 'menu_products', onMenuChange)
     subscribeTable('till_realtime_menu_categories', 'menu_categories', onMenuChange)
     if (features.foodOptions) subscribeTable('till_realtime_menu_option_groups', 'menu_option_groups', onMenuChange)
+    if (features.tables) {
+      subscribeTable('till_realtime_floor_areas', 'floor_areas', onMenuChange)
+      subscribeTable('till_realtime_floor_tables', 'floor_tables', onMenuChange)
+    }
     // stock_items also changes on every sale (qty), so only refetch the menu when a definition changed.
     const definitionChanged = (payload) => {
       if (payload.eventType !== 'UPDATE') return true
@@ -1077,10 +1089,14 @@ export default function App() {
     setActiveOrderKey(key)
   }, [setActiveOrderKey])
 
-  const openNewTabEntry = useCallback((name) => {
+  const openNewTabEntry = useCallback((name, extra = {}) => {
     const id = 'tab_' + tabIdCounter
     setTabIdCounter(c => c + 1)
-    const newTab = { id, name, items: [], openedAt: new Date(), staff: activeSaleStaff }
+    const newTab = {
+      id, name, items: [], openedAt: new Date(), staff: activeSaleStaff,
+      ...(extra.tableId ? { tableId: extra.tableId } : {}),
+      ...(extra.covers != null ? { covers: extra.covers } : {}),
+    }
     setOpenTabs(prev => [...prev, newTab])
     setOrders(prev => ({ ...prev, [id]: {} }))
     insertTabToSupabase(newTab)
@@ -1177,6 +1193,7 @@ export default function App() {
       staff: activeSaleStaff,
       type: 'tab',
       tabName: tab.name,
+      ...(tab.covers != null ? { covers: tab.covers } : {}),
       voided: false,
       ...(payment === 'cash' ? {
         tenderedAmount: extras.tenderedAmount ?? null,
@@ -1465,6 +1482,68 @@ export default function App() {
     showToast('Option group deleted')
   }, [setOptionGroups, showToast])
 
+  const newFloorId = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+
+  const saveFloorArea = useCallback((area) => {
+    const name = String(area.name || '').trim()
+    if (!name) return null
+    const existing = area.id ? floorAreas.find(a => a.id === area.id) : null
+    const row = {
+      id: existing?.id || newFloorId('area_'),
+      name,
+      sort: existing?.sort ?? (Math.max(0, ...floorAreas.map(a => a.sort ?? 0)) + 1),
+    }
+    setFloorAreas(prev => (existing ? prev.map(a => (a.id === row.id ? row : a)) : [...prev, row]))
+    sendMenuOp('floor_area', { id: row.id, name: row.name, sort: row.sort })
+    return row
+  }, [floorAreas, setFloorAreas])
+
+  const deleteFloorArea = useCallback((id) => {
+    floorTables.filter(t => t.areaId === id).forEach(t => sendMenuOp('floor_table_delete', { id: t.id }))
+    setFloorTables(prev => prev.filter(t => t.areaId !== id))
+    setFloorAreas(prev => prev.filter(a => a.id !== id))
+    sendMenuOp('floor_area_delete', { id })
+    showToast('Area deleted')
+  }, [floorTables, setFloorTables, setFloorAreas, showToast])
+
+  const saveFloorTable = useCallback((table) => {
+    const name = String(table.name || '').trim()
+    if (!name || !table.areaId) return null
+    const seatsNum = table.seats === '' || table.seats == null ? null : Number(table.seats)
+    const clash = floorTables.some(t => t.areaId === table.areaId && t.id !== table.id && t.name.toLowerCase() === name.toLowerCase())
+    if (clash) { showToast('That table already exists in this area'); return null }
+    const existing = table.id ? floorTables.find(t => t.id === table.id) : null
+    const sort = existing?.sort ?? (Math.max(0, ...floorTables.filter(t => t.areaId === table.areaId).map(t => t.sort ?? 0)) + 1)
+    const row = { id: existing?.id || newFloorId('t_'), areaId: table.areaId, name, seats: Number.isFinite(seatsNum) ? seatsNum : null, sort }
+    setFloorTables(prev => (existing ? prev.map(t => (t.id === row.id ? row : t)) : [...prev, row]))
+    sendMenuOp('floor_table', { id: row.id, area_id: row.areaId, name: row.name, seats: row.seats, sort: row.sort })
+    return row
+  }, [floorTables, setFloorTables, showToast])
+
+  const deleteFloorTable = useCallback((id) => {
+    setFloorTables(prev => prev.filter(t => t.id !== id))
+    sendMenuOp('floor_table_delete', { id })
+  }, [setFloorTables])
+
+  /** Add tables named from..to (numbers) to an area, skipping names that already exist. */
+  const addFloorTableRange = useCallback((areaId, from, to, seats) => {
+    const a = Math.floor(Number(from)); const b = Math.floor(Number(to))
+    if (!areaId || !Number.isFinite(a) || !Number.isFinite(b) || b < a || b - a > 200) return 0
+    const have = new Set(floorTables.filter(t => t.areaId === areaId).map(t => t.name.toLowerCase()))
+    let sort = Math.max(0, ...floorTables.filter(t => t.areaId === areaId).map(t => t.sort ?? 0))
+    const seatsNum = seats === '' || seats == null ? null : Number(seats)
+    const rows = []
+    for (let n = a; n <= b; n++) {
+      if (have.has(String(n))) continue
+      sort += 1
+      rows.push({ id: newFloorId('t_') + n, areaId, name: String(n), seats: Number.isFinite(seatsNum) ? seatsNum : null, sort })
+    }
+    if (!rows.length) return 0
+    setFloorTables(prev => [...prev, ...rows])
+    rows.forEach(r => sendMenuOp('floor_table', { id: r.id, area_id: r.areaId, name: r.name, seats: r.seats, sort: r.sort }))
+    return rows.length
+  }, [floorTables, setFloorTables])
+
   const saveCategory = useCallback((type, rawName) => {
     const name = String(rawName || '').trim()
     if (!name || !['till', 'stock'].includes(type)) return ''
@@ -1648,6 +1727,9 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
+    floorAreas, floorTables, saveFloorTable, deleteFloorTable, addFloorTableRange,
+    saveFloorArea, deleteFloorArea,
+    goToTill: () => setView('till'),
     showToast,
   }
 
@@ -1672,6 +1754,7 @@ export default function App() {
           <Sales {...sharedProps} />
         </ManagerGate>
       )}
+      {features.tables && view === 'tables' && <Tables {...sharedProps} />}
       {features.reports && view === 'reports' && (
         <ManagerGate unlocked={managerUnlocked} verifyPin={verifyManagerPin} onUnlock={unlockManager} title="Manager PIN: Reports">
           <Reports {...sharedProps} />

@@ -139,7 +139,7 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
                   )}
                 </div>
                 <div className={styles.cardMeta}>
-                  Opened {opened} · {(tab.staff && inNames.has(tab.staff)) ? tab.staff : 'Manager'} · {totalItems} items
+                  Opened {opened} · {(tab.staff && inNames.has(tab.staff)) ? tab.staff : 'Manager'} · {totalItems} items{tab.covers != null ? ` · ${tab.covers} ${tab.covers === 1 ? 'cover' : 'covers'}` : ''}
                 </div>
                 <div className={styles.cardItems}>
                   {tab.items.length

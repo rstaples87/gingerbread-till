@@ -30,6 +30,9 @@ export function transactionRowForSupabase(tx) {
     voided_at,
   }
 
+  // Covers exist only in the POS database; the events Till never sets them.
+  if (tx.covers != null) row.covers = Number(tx.covers)
+
   const tabName = tx.tabName ?? tx.tab_name
   if (tabName != null && tabName !== '') {
     row.tab_name = tabName
