@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CATEGORIES, STOCK_CATEGORIES } from '../data'
 import { fmt } from '../utils'
 import { features } from '../features'
+import { POS_FOOD_CATEGORIES } from '../data'
 import styles from './Settings.module.css'
 
 const STOCK_UNITS = ['bottle', 'can', 'carton']
@@ -392,7 +393,12 @@ export default function Settings({
               mode={productForm.categoryMode}
               draft={productForm.categoryDraft}
               categories={tillCategories}
-              onChange={category => setProductForm(form => ({ ...form, category }))}
+              onChange={category => setProductForm(form => ({
+                ...form,
+                category,
+                // In the POS build, picking a food category defaults the product to food.
+                ...(features.taxFieldsInProductEditor && POS_FOOD_CATEGORIES.includes(category) ? { group: 'food' } : {}),
+              }))}
               onCustomChange={categoryDraft => setProductForm(form => ({ ...form, categoryMode: 'custom', categoryDraft }))}
               onCancelCustom={() => setProductForm(form => ({
                 ...form,

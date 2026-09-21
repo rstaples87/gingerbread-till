@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import {
-  INITIAL_PRODUCTS,
+  INITIAL_PRODUCTS as BAR_PRODUCTS,
   INITIAL_STAFF,
-  STOCK_ITEMS as INITIAL_STOCK_ITEMS,
-  PRODUCT_VARIANTS as INITIAL_PRODUCT_VARIANTS,
+  STOCK_ITEMS as BAR_STOCK_ITEMS,
+  PRODUCT_VARIANTS as BAR_PRODUCT_VARIANTS,
   DEFAULT_TAB_LIMIT,
   ADMIN_PIN,
-  CATEGORIES as DEFAULT_TILL_CATEGORIES,
+  CATEGORIES as BAR_TILL_CATEGORIES,
+  POS_TILL_CATEGORIES,
   STOCK_CATEGORIES as DEFAULT_STOCK_CATEGORIES,
 } from './data'
 import { supabase, isSupabaseConfigured } from './supabase'
@@ -15,7 +16,14 @@ import { useVenueAuth, signOutVenue } from './auth'
 import VenueSignIn from './components/VenueSignIn'
 import ManagerGate from './components/ManagerGate'
 import Reports from './components/Reports'
-import { features } from './features'
+import { features, isPosMode } from './features'
+
+// The events Till starts from the built-in bar menu. The Haywain POS starts empty (its menu is entered in Settings),
+// so a fresh POS device never loads the bar menu into the POS database.
+const INITIAL_PRODUCTS = isPosMode ? [] : BAR_PRODUCTS
+const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
+const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
+const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
 import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields } from './utils'
 import Header from './components/Header'
@@ -910,6 +918,7 @@ export default function App() {
 
   // One-time reset for legacy product sets when menu has changed.
   useEffect(() => {
+    if (isPosMode) return // POS menus are entered by hand; never reset them to the bar menu
     if (!Array.isArray(products) || products.length === 0) return
     const hasNewMenuIds = products.some(p => p.id >= 22)
     if (hasNewMenuIds) return
