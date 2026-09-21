@@ -30,3 +30,9 @@
 .bigVal span { font-size: 13px; font-weight: 500; color: var(--muted); margin-top: 4px; }
 .share { text-align: center; font-size: 16px; }
 .share strong { font-size: 22px; }
+.cashBox { display: flex; flex-direction: column; gap: 6px; }
+.cashQuick { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 9px 13px; border-radius: 16px; border: 1px solid var(--border); background: var(--white); font-size: 14px; }
+.cashInput { padding: 11px 12px; font-size: 18px; border: 1px solid var(--border); border-radius: 10px; }
+.cashLow { color: var(--red); font-size: 14px; }
+.cashChange { background: var(--bg); border-radius: 10px; padding: 8px 12px; font-size: 15px; }

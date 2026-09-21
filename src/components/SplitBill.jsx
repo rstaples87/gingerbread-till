@@ -14,6 +14,7 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
   const [people, setPeople] = useState(2)
   const [busy, setBusy] = useState(false)
   const [tip, setTip] = useState(0)
+  const [tendered, setTendered] = useState('')
 
   // Whatever was just paid is gone from the table, so clear the picks.
   useEffect(() => { setPicks({}) }, [tab?.items?.length, tabTotal(tab || { items: [] })])
@@ -34,10 +35,36 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
   }
   const selectAll = () => setPicks(Object.fromEntries(tab.items.map((it, i) => [i, it.qty])))
 
-  const pay = async (spec) => {
+  const tenderedNum = parseFloat(tendered)
+  const hasTendered = tendered.trim() !== '' && !Number.isNaN(tenderedNum)
+  // Amount this payment must cover (bill part plus any tip); only cash needs a tendered figure.
+  const dueNow = (amount) => Math.round((amount + tip) * 100) / 100
+  const cashShort = (amount) => payment === 'cash' && (!hasTendered || tenderedNum < dueNow(amount))
+
+  const cashBox = (amount) => payment !== 'cash' ? null : (
+    <div className={styles.cashBox}>
+      <div className={styles.hint}>Cash tendered</div>
+      <div className={styles.cashQuick}>
+        {[5, 10, 20, 50].map(n => (
+          <button key={n} type="button" className={styles.chip} onClick={() => setTendered(String(n))}>{fmt(n)}</button>
+        ))}
+        <button type="button" className={styles.chip} onClick={() => setTendered(String(dueNow(amount)))}>Exact</button>
+      </div>
+      <input className={styles.cashInput} type="text" inputMode="decimal" placeholder="0.00" value={tendered} onChange={e => setTendered(e.target.value)} aria-label="Cash tendered" />
+      {hasTendered && (tenderedNum < dueNow(amount)
+        ? <div className={styles.cashLow}>Not enough — {fmt(dueNow(amount))} needed</div>
+        : <div className={styles.cashChange}>Change due <strong>{fmt(tenderedNum - dueNow(amount))}</strong></div>)}
+    </div>
+  )
+
+  const pay = async (spec, amount) => {
     setBusy(true)
-    const r = await onPay(spec, payment, tip)
+    const cash = payment === 'cash' && hasTendered
+      ? { tenderedAmount: tenderedNum, changeGiven: Math.max(0, Math.round((tenderedNum - dueNow(amount)) * 100) / 100) }
+      : null
+    const r = await onPay(spec, payment, tip, cash)
     setBusy(false)
+    if (r?.ok) setTendered('')
     if (r?.closed) onClose()
     else if (r?.ok && spec.kind === 'even') setPeople(p => Math.max(1, p - 1))
   }
@@ -91,11 +118,12 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
                   <button type="button" className={styles.linkBtn} onClick={() => setPicks({})} disabled={!selected.lines.length}>Clear</button>
                 </div>
                 <TipPicker bill={selected.amount} onChange={setTip} />
+                {cashBox(selected.amount)}
                 <button
                   type="button"
                   className={styles.primary}
-                  disabled={busy || !selected.lines.length}
-                  onClick={() => pay({ kind: 'items', picks })}
+                  disabled={busy || !selected.lines.length || cashShort(selected.amount)}
+                  onClick={() => pay({ kind: 'items', picks }, selected.amount)}
                 >
                   Pay selected {fmt(selected.amount)} by {payment}
                 </button>
@@ -115,11 +143,12 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
                 </div>
                 {!lastPerson && <div className={styles.hint}>Pennies are shared out so the shares add up exactly. The last person pays whatever is left.</div>}
                 <TipPicker bill={share.amount} onChange={setTip} />
+                {cashBox(share.amount)}
                 <button
                   type="button"
                   className={styles.primary}
-                  disabled={busy || total <= 0}
-                  onClick={() => pay({ kind: 'even', people })}
+                  disabled={busy || total <= 0 || cashShort(share.amount)}
+                  onClick={() => pay({ kind: 'even', people }, share.amount)}
                 >
                   {lastPerson ? 'Pay the rest' : 'Pay one share'} {fmt(share.amount)} by {payment}
                 </button>

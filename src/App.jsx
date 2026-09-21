@@ -1444,7 +1444,7 @@ export default function App() {
    * Pay part of a table's bill (split bill). spec: { kind: 'items', picks } or { kind: 'even', people }.
    * Records a separate sale for that part and leaves the rest on the table; when nothing is left the table closes.
    */
-  const payTabPart = useCallback((tabId, spec, payment, tip = 0) => {
+  const payTabPart = useCallback((tabId, spec, payment, tip = 0, cash = null) => {
     const tab = openTabs.find(t => t.id === tabId)
     if (!tab) return { ok: false }
     const part = spec.kind === 'even' ? takeEvenShare(tab.items, spec.people) : takeItemsPart(tab.items, spec.picks)
@@ -1466,6 +1466,7 @@ export default function App() {
       ...(closing && tab.covers != null ? { covers: tab.covers } : {}),
       ...(tip > 0 ? { tip: Math.round(Number(tip) * 100) / 100 } : {}),
       voided: false,
+      ...(payment === 'cash' && cash ? { tenderedAmount: cash.tenderedAmount, changeGiven: cash.changeGiven } : {}),
     })
     if (closing) {
       deleteTabFromSupabase(tabId)
@@ -1993,7 +1994,7 @@ export default function App() {
         <SplitBill
           tab={hydratedTabs.find(t => t.id === splitTabId)}
           hasPending={Object.keys(orders[splitTabId] || {}).length > 0}
-          onPay={(spec, payment, tip) => payTabPart(splitTabId, spec, payment, tip)}
+          onPay={(spec, payment, tip, cash) => payTabPart(splitTabId, spec, payment, tip, cash)}
           onClose={() => setSplitTabId(null)}
         />
       )}
