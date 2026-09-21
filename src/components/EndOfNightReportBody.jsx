@@ -74,6 +74,12 @@ export default function EndOfNightReportBody({
         <div className={`${styles.reportRow} ${styles.reportTotal}`}>
           <span>Total takings</span><span>{fmt(t.totalTakings)}</span>
         </div>
+        {(t.tipCard > 0 || t.tipCash > 0) && (
+          <>
+            <div className={styles.reportRow}><span>Tips on card (to pay out)</span><span>{fmt(t.tipCard)}</span></div>
+            <div className={styles.reportRow}><span>Tips in cash</span><span>{fmt(t.tipCash)}</span></div>
+          </>
+        )}
       </div>
 
       <div className={styles.reportSection}>

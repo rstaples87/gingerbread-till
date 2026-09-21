@@ -36,6 +36,7 @@ export function normaliseTransactionRowLive(row) {
     changeGiven: row.change_given != null ? Number(row.change_given) : undefined,
     sessionDate: row.session_date ?? undefined,
     covers: row.covers != null ? Number(row.covers) : undefined,
+    tip: row.tip != null ? Number(row.tip) : undefined,
   }
 }
 
@@ -60,6 +61,7 @@ export function normaliseTabRowLive(row) {
     limit: lim != null && lim !== '' ? Number(lim) : undefined,
     tableId: row.table_id ?? undefined,
     covers: row.covers != null ? Number(row.covers) : undefined,
+    tip: row.tip != null ? Number(row.tip) : undefined,
     customer: row.customer ?? undefined,
   }
 }

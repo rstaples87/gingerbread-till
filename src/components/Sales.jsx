@@ -106,6 +106,7 @@ function PastReportTransactions({ sessionDate, savedTransactionIds, visibleStaff
                 {tx.payment === 'cash' ? 'Cash' : tx.payment === 'card' ? 'Card' : 'Account'}
               </span>
               {tx.type === 'tab' && <span className={`${s.badge} ${s.badgeTab}`}>Tab: {tx.tabName}</span>}
+              {tx.tip > 0 && <span className={`${s.badge} ${s.badgeTab}`}>+{fmt(tx.tip)} tip</span>}
               {tx.voided && <span className={`${s.badge} ${s.badgeVoid}`}>Voided</span>}
             </div>
             <div className={`${s.txDetail} ${tx.voided ? s.txDetailVoided : ''}`}>
@@ -275,6 +276,9 @@ export default function Sales({
   const cardTotal = live.filter(t => t.payment === 'card').reduce((s, t) => s + t.total, 0)
   const accountTotal = live.filter(t => t.payment === 'account').reduce((s, t) => s + t.total, 0)
   const totalItems = live.reduce((s, t) => s + t.items.reduce((a, i) => a + i.qty, 0), 0)
+  const tipCard = live.filter(t => t.payment !== 'cash').reduce((s, t) => s + (Number(t.tip) || 0), 0)
+  const tipCash = live.filter(t => t.payment === 'cash').reduce((s, t) => s + (Number(t.tip) || 0), 0)
+  const tipTotal = tipCard + tipCash
 
   const popularity = {}
   live.forEach(t => t.items.forEach(i => { popularity[i.name] = (popularity[i.name] || 0) + i.qty }))
@@ -322,6 +326,8 @@ export default function Sales({
     cashTotal,
     cardTotal,
     accountTotal,
+    tipCard,
+    tipCash,
     liveTransactionCount: live.length,
     popSorted,
     staffMap,
@@ -387,6 +393,8 @@ export default function Sales({
         cashTotal: snapCash,
         cardTotal: snapCard,
         accountTotal: snapAccount,
+        tipCard: snapLive.filter(t => t.payment !== 'cash').reduce((s, t) => s + (Number(t.tip) || 0), 0),
+        tipCash: snapLive.filter(t => t.payment === 'cash').reduce((s, t) => s + (Number(t.tip) || 0), 0),
         liveTransactionCount: snapLive.length,
         popSorted: snapPopSorted,
         staffMap: snapStaffMap,
@@ -482,6 +490,9 @@ export default function Sales({
               <div className={styles.statCard}><div className={styles.scLabel}>Card</div><div className={styles.scValue}>{fmt(cardTotal)}</div></div>
               {accountTotal > 0 && (
                 <div className={`${styles.statCard} ${styles.span2}`}><div className={styles.scLabel}>On account</div><div className={styles.scValue}>{fmt(accountTotal)}</div></div>
+              )}
+              {tipTotal > 0 && (
+                <div className={`${styles.statCard} ${styles.span2}`}><div className={styles.scLabel}>Tips (not in takings) — card {fmt(tipCard)} · cash {fmt(tipCash)}</div><div className={styles.scValue}>{fmt(tipTotal)}</div></div>
               )}
             </div>
 

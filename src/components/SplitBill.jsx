@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fmt, tabTotal, tabLabel, takeItemsPart, takeEvenShare, saleLineText, fmtQty } from '../utils'
+import TipPicker from './TipPicker'
 import styles from './SplitBill.module.css'
 
 /**
@@ -12,6 +13,7 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
   const [picks, setPicks] = useState({}) // { lineIndex: qty }
   const [people, setPeople] = useState(2)
   const [busy, setBusy] = useState(false)
+  const [tip, setTip] = useState(0)
 
   // Whatever was just paid is gone from the table, so clear the picks.
   useEffect(() => { setPicks({}) }, [tab?.items?.length, tabTotal(tab || { items: [] })])
@@ -34,7 +36,7 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
 
   const pay = async (spec) => {
     setBusy(true)
-    const r = await onPay(spec, payment)
+    const r = await onPay(spec, payment, tip)
     setBusy(false)
     if (r?.closed) onClose()
     else if (r?.ok && spec.kind === 'even') setPeople(p => Math.max(1, p - 1))
@@ -88,6 +90,7 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
                   <button type="button" className={styles.linkBtn} onClick={selectAll}>Select everything</button>
                   <button type="button" className={styles.linkBtn} onClick={() => setPicks({})} disabled={!selected.lines.length}>Clear</button>
                 </div>
+                <TipPicker bill={selected.amount} onChange={setTip} />
                 <button
                   type="button"
                   className={styles.primary}
@@ -111,6 +114,7 @@ export default function SplitBill({ tab, hasPending, onPay, onClose }) {
                   {lastPerson ? 'The last person pays' : 'Each pays about'} <strong>{fmt(share.amount)}</strong>
                 </div>
                 {!lastPerson && <div className={styles.hint}>Pennies are shared out so the shares add up exactly. The last person pays whatever is left.</div>}
+                <TipPicker bill={share.amount} onChange={setTip} />
                 <button
                   type="button"
                   className={styles.primary}

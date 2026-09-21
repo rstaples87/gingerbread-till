@@ -272,3 +272,6 @@ alter table public.floor_shapes add column if not exists rot numeric not null de
 
 -- Customer name on a table/tab (added 2026-09-21).
 alter table public.tabs add column if not exists customer text;
+
+-- Tip on a payment (added 2026-09-21). Not part of the bill.
+alter table public.transactions add column if not exists tip numeric;

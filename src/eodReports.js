@@ -25,6 +25,8 @@ export function buildEodReportData({
   cashTotal,
   cardTotal,
   accountTotal,
+  tipCard = 0,
+  tipCash = 0,
   liveTransactionCount,
   popSorted,
   staffMap,
@@ -50,6 +52,8 @@ export function buildEodReportData({
       cashTotal,
       cardTotal,
       accountTotal,
+      tipCard,
+      tipCash,
       transactionCount: liveTransactionCount,
     },
     cashReconciliation: {

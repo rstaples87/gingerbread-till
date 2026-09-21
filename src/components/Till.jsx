@@ -3,6 +3,7 @@ import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
 import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel, allocateDiscount, lineAmount } from '../utils'
 import DiscountSheet from './DiscountSheet'
 import { features } from '../features'
+import TipPicker from './TipPicker'
 import { supabase } from '../supabase'
 import { logSupabaseWrite } from '../supabaseWriteLog'
 import { enqueueSyncQueueItem, isLikelyNetworkFailure } from '../syncQueue'
@@ -30,6 +31,8 @@ export default function Till({
   })
   const [numpad, setNumpad] = useState(null) // { productId, value }
   const [chargeModal, setChargeModal] = useState(false)
+  const [chargeTip, setChargeTip] = useState(0)
+  const [settleTip, setSettleTip] = useState(0)
   const [confPayment, setConfPayment] = useState('cash')
   const [newTabModal, setNewTabModal] = useState(false)
   const [newTabName, setNewTabName] = useState('')
@@ -388,9 +391,10 @@ export default function Till({
     const noteTrim = tabOrderNotes.trim()
     const extras = {
       ...(confPayment === 'cash' && hasTendered
-        ? { tenderedAmount: tenderedValue, changeGiven: Math.max(0, tenderedValue - total) }
+        ? { tenderedAmount: tenderedValue, changeGiven: Math.max(0, tenderedValue - (total + (features.tips ? chargeTip : 0))) }
         : {}),
       ...(noteTrim ? { notes: noteTrim } : {}),
+      ...(features.tips && chargeTip > 0 ? { tip: chargeTip } : {}),
     }
     if (features.stations) {
       // Food in a quick sale (e.g. takeaway) still needs cooking; drinks are served straight away.
@@ -437,9 +441,10 @@ export default function Till({
   const tenderedValue = parseFloat(cashTendered)
   const hasTendered = cashTendered.trim() !== '' && !Number.isNaN(tenderedValue)
   const isCashConfirm = confPayment === 'cash'
-  const isAmountTooLow = isCashConfirm && hasTendered && tenderedValue < total
-  const canConfirmCharge = !isCashConfirm || (hasTendered && tenderedValue >= total)
-  const changeDue = isCashConfirm && hasTendered ? Math.max(0, tenderedValue - total) : 0
+  const payTotal = Math.round((total + (features.tips ? chargeTip : 0)) * 100) / 100
+  const isAmountTooLow = isCashConfirm && hasTendered && tenderedValue < payTotal
+  const canConfirmCharge = !isCashConfirm || (hasTendered && tenderedValue >= payTotal)
+  const changeDue = isCashConfirm && hasTendered ? Math.max(0, tenderedValue - payTotal) : 0
 
   const canSettleNow =
     Boolean(activeTab) && (tabCommittedTotal > 0 || (hasItems && !wouldExceedTabLimit))
@@ -473,9 +478,11 @@ export default function Till({
   const settleTenderedValue = parseFloat(settleCashTendered)
   const settleHasTendered = settleCashTendered.trim() !== '' && !Number.isNaN(settleTenderedValue)
   const settleIsCash = settlePayment === 'cash'
-  const settleAmountTooLow = settleIsCash && settleHasTendered && settleTenderedValue < settleModalTotal
-  const settleCanConfirm = !settleIsCash || (settleHasTendered && settleTenderedValue >= settleModalTotal)
-  const settleChangeDue = settleIsCash && settleHasTendered ? Math.max(0, settleTenderedValue - settleModalTotal) : 0
+  const settleTipAmt = features.tips && settlePayment !== 'account' ? settleTip : 0
+  const settlePayTotal = Math.round((settleModalTotal + settleTipAmt) * 100) / 100
+  const settleAmountTooLow = settleIsCash && settleHasTendered && settleTenderedValue < settlePayTotal
+  const settleCanConfirm = !settleIsCash || (settleHasTendered && settleTenderedValue >= settlePayTotal)
+  const settleChangeDue = settleIsCash && settleHasTendered ? Math.max(0, settleTenderedValue - settlePayTotal) : 0
 
   const confirmSettleTill = () => {
     if (!settleModalTabId || !settleTabForModal) {
@@ -485,7 +492,7 @@ export default function Till({
     const extras = settlePayment === 'cash' && settleHasTendered
       ? { tenderedAmount: settleTenderedValue, changeGiven: settleChangeDue }
       : {}
-    settleTab(settleModalTabId, settlePayment, extras)
+    settleTab(settleModalTabId, settlePayment, { ...extras, ...(settleTipAmt > 0 ? { tip: settleTipAmt } : {}) })
     closeSettleModal()
   }
 
@@ -1112,6 +1119,7 @@ export default function Till({
                 </button>
               ))}
             </div>
+            {features.tips && <TipPicker bill={total} onChange={setChargeTip} />}
             {confPayment === 'cash' && (
               <div className={styles.cashTenderSection}>
                 <div className={styles.cashTenderLabel}>Cash tendered</div>
@@ -1180,6 +1188,7 @@ export default function Till({
                 </button>
               ))}
             </div>
+            {features.tips && settlePayment !== 'account' && <TipPicker bill={settleModalTotal} onChange={setSettleTip} />}
             {settlePayment === 'cash' && (
               <div className={styles.cashTenderSection}>
                 <div className={styles.cashTenderLabel}>Cash tendered</div>

@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { DEFAULT_TAB_LIMIT } from '../data'
 import { fmt, tabTotal, saleLineText, tabLabel, lineAmount } from '../utils'
 import { features } from '../features'
+import TipPicker from './TipPicker'
 import styles from './TabsView.module.css'
 
 export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, switchOrder, showToast, updateTabLimit, openSplit, openDiscount }) {
   const [settleModal, setSettleModal] = useState(null) // tabId
   const [settlePayment, setSettlePayment] = useState('cash')
   const [cashTendered, setCashTendered] = useState('')
+  const [tip, setTip] = useState(0)
   const [limitEditTabId, setLimitEditTabId] = useState(null)
   const [limitDraft, setLimitDraft] = useState('')
   const inNames = new Set((currentlyIn || []).map(row => row.staffName))
@@ -47,12 +49,13 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
     const tabRow = openTabs.find(t => t.id === settleModal)
     if (!tabRow) return
     const total = tabTotal(tabRow)
+    const tipAmt = features.tips && settlePayment !== 'account' ? tip : 0
     const tenderedValue = parseFloat(cashTendered)
     const hasTendered = cashTendered.trim() !== '' && !Number.isNaN(tenderedValue)
     const extras = settlePayment === 'cash' && hasTendered
-      ? { tenderedAmount: tenderedValue, changeGiven: Math.max(0, tenderedValue - total) }
+      ? { tenderedAmount: tenderedValue, changeGiven: Math.max(0, tenderedValue - (total + tipAmt)) }
       : {}
-    settleTab(settleModal, settlePayment, extras)
+    settleTab(settleModal, settlePayment, { ...extras, ...(tipAmt > 0 ? { tip: tipAmt } : {}) })
     setSettleModal(null)
     setCashTendered('')
   }
@@ -68,9 +71,10 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
   const tenderedValue = parseFloat(cashTendered)
   const hasTendered = cashTendered.trim() !== '' && !Number.isNaN(tenderedValue)
   const isCashSettle = settlePayment === 'cash'
-  const isAmountTooLow = isCashSettle && hasTendered && tenderedValue < settleTotal
-  const canConfirmSettle = !isCashSettle || (hasTendered && tenderedValue >= settleTotal)
-  const changeDue = isCashSettle && hasTendered ? Math.max(0, tenderedValue - settleTotal) : 0
+  const payTotal = Math.round((settleTotal + (features.tips && settlePayment !== 'account' ? tip : 0)) * 100) / 100
+  const isAmountTooLow = isCashSettle && hasTendered && tenderedValue < payTotal
+  const canConfirmSettle = !isCashSettle || (hasTendered && tenderedValue >= payTotal)
+  const changeDue = isCashSettle && hasTendered ? Math.max(0, tenderedValue - payTotal) : 0
 
   return (
     <div className={styles.wrap}>
@@ -183,6 +187,7 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
                 </button>
               ))}
             </div>
+            {features.tips && settlePayment !== 'account' && <TipPicker bill={settleTotal} onChange={setTip} />}
             {settlePayment === 'cash' && (
               <div className={styles.cashTenderSection}>
                 <div className={styles.cashTenderLabel}>Cash tendered</div>

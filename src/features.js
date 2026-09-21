@@ -28,4 +28,9 @@ export const features = {
   stations: isPosMode,
   // Discounts and comps (free items) on tables, tabs and quick sales. POS only.
   discounts: isPosMode,
+  // Optional tip added on the final payment screen only (never part of the bill, sales or VAT). POS only.
+  tips: isPosMode,
 }
+
+/** Quick tip choices, as a percentage of the amount being paid. */
+export const TIP_PERCENTS = [10, 12.5, 15]

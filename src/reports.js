@@ -39,6 +39,7 @@ export function buildSalesReport(transactions) {
   const discounts = { amount: 0, lines: 0, comps: 0, compLines: 0 }
   const byReason = new Map()
   const byDay = new Map()
+  const tips = { total: 0, card: 0, cash: 0, count: 0 }
 
   for (const tx of transactions || []) {
     if (!tx || tx.voided) continue
@@ -46,6 +47,13 @@ export function buildSalesReport(transactions) {
     if (Number.isNaN(time.getTime())) continue
     const items = Array.isArray(tx.items) ? tx.items : []
     summary.transactions += 1
+    const tip = Number(tx.tip) || 0
+    if (tip > 0) {
+      tips.total += tip
+      tips.count += 1
+      if (tx.payment === 'cash') tips.cash += tip
+      else tips.card += tip
+    }
     const pay = tx.payment || 'other'
     byPayment[pay] = byPayment[pay] || { gross: 0, count: 0 }
     byPayment[pay].count += 1
@@ -82,6 +90,7 @@ export function buildSalesReport(transactions) {
     byGroup,
     byPayment,
     discounts,
+    tips,
     byReason: Array.from(byReason.values()).sort((a, b) => b.amount - a.amount),
     byItem: Array.from(byItem.values()).sort((a, b) => b.gross - a.gross),
     byHour,

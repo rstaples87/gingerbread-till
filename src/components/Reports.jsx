@@ -155,6 +155,18 @@ export default function Reports({ stockDefinitions = [], stockItems = {}, produc
               </table>
             </div>
 
+            {report.tips.count > 0 && (
+              <div className={styles.section}>
+                <div className={styles.h}>Tips</div>
+                <div className={styles.grid}>
+                  <div className={styles.card}><div className={styles.label}>Total tips</div><div className={styles.value}>{money(report.tips.total)}</div><div className={styles.sub}>{report.tips.count} {report.tips.count === 1 ? 'payment' : 'payments'}</div></div>
+                  <div className={styles.card}><div className={styles.label}>On card</div><div className={styles.value}>{money(report.tips.card)}</div></div>
+                  <div className={styles.card}><div className={styles.label}>In cash</div><div className={styles.value}>{money(report.tips.cash)}</div></div>
+                </div>
+                <div className={styles.foot}>Tips are not part of sales, VAT or takings.</div>
+              </div>
+            )}
+
             {report.discounts.lines > 0 && (
               <div className={styles.section}>
                 <div className={styles.h}>Discounts and comps</div>

@@ -32,6 +32,8 @@ export function transactionRowForSupabase(tx) {
 
   // Covers exist only in the POS database; the events Till never sets them.
   if (tx.covers != null) row.covers = Number(tx.covers)
+  // Tips exist only in the POS database.
+  if (tx.tip > 0) row.tip = Number(tx.tip)
 
   const tabName = tx.tabName ?? tx.tab_name
   if (tabName != null && tabName !== '') {

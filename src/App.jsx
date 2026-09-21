@@ -1206,6 +1206,7 @@ export default function App() {
       type: 'tab',
       tabName: tabLabel(tab),
       ...(tab.covers != null ? { covers: tab.covers } : {}),
+      ...(extras.tip > 0 ? { tip: Math.round(Number(extras.tip) * 100) / 100 } : {}),
       voided: false,
       ...(payment === 'cash' ? {
         tenderedAmount: extras.tenderedAmount ?? null,
@@ -1264,6 +1265,7 @@ export default function App() {
       payment,
       staff: activeSaleStaff,
       type: 'sale',
+      ...(extras.tip > 0 ? { tip: Math.round(Number(extras.tip) * 100) / 100 } : {}),
       voided: false,
       ...(payment === 'cash' ? {
         tenderedAmount: extras.tenderedAmount ?? null,
@@ -1442,7 +1444,7 @@ export default function App() {
    * Pay part of a table's bill (split bill). spec: { kind: 'items', picks } or { kind: 'even', people }.
    * Records a separate sale for that part and leaves the rest on the table; when nothing is left the table closes.
    */
-  const payTabPart = useCallback((tabId, spec, payment) => {
+  const payTabPart = useCallback((tabId, spec, payment, tip = 0) => {
     const tab = openTabs.find(t => t.id === tabId)
     if (!tab) return { ok: false }
     const part = spec.kind === 'even' ? takeEvenShare(tab.items, spec.people) : takeItemsPart(tab.items, spec.picks)
@@ -1462,6 +1464,7 @@ export default function App() {
       tabName: `${tabLabel(tab)} (split)`,
       // Covers are counted once, on the payment that closes the table.
       ...(closing && tab.covers != null ? { covers: tab.covers } : {}),
+      ...(tip > 0 ? { tip: Math.round(Number(tip) * 100) / 100 } : {}),
       voided: false,
     })
     if (closing) {
@@ -1990,7 +1993,7 @@ export default function App() {
         <SplitBill
           tab={hydratedTabs.find(t => t.id === splitTabId)}
           hasPending={Object.keys(orders[splitTabId] || {}).length > 0}
-          onPay={(spec, payment) => payTabPart(splitTabId, spec, payment)}
+          onPay={(spec, payment, tip) => payTabPart(splitTabId, spec, payment, tip)}
           onClose={() => setSplitTabId(null)}
         />
       )}
