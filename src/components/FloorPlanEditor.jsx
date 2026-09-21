@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import FloorPlan, { SHAPES, STRUCTURE_STYLES, layoutOf, PLAN_W, PLAN_H } from './FloorPlan'
+import FloorPlan, { SHAPES, STRUCTURE_STYLES, layoutOf, normRot, resizeKeepingCorner, PLAN_W, PLAN_H } from './FloorPlan'
 import fp from './FloorPlan.module.css'
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
@@ -38,7 +38,7 @@ export default function FloorPlanEditor({ areaId, tables, structures = [], saveF
     if (!window.confirm('Put every table in this area back into a neat grid? Your table positions will be lost (walls stay).')) return
     ordered.forEach((t, i) => {
       const cols = 7
-      saveFloorTable({ ...t, x: 3 + (i % cols) * 13.6, y: 3 + Math.floor(i / cols) * 12.5, w: 11.5, h: 10, shape: 'square' })
+      saveFloorTable({ ...t, x: 3 + (i % cols) * 13.6, y: 3 + Math.floor(i / cols) * 12.5, w: 11.5, h: 10, shape: 'square', rot: 0 })
     })
     showToast?.('Tables tidied into a grid')
   }
@@ -50,10 +50,31 @@ export default function FloorPlanEditor({ areaId, tables, structures = [], saveF
   }
   const resize = (dw, dh) => {
     if (!structure) return
-    const w = clamp(Number(structure.w) + dw, 1, PLAN_W - Number(structure.x))
-    const h = clamp(Number(structure.h) + dh, 1, PLAN_H - Number(structure.y))
-    saveFloorShape({ ...structure, w, h })
+    const w = clamp(Number(structure.w) + dw, 1, PLAN_W)
+    const h = clamp(Number(structure.h) + dh, 1, PLAN_H)
+    saveFloorShape({ ...structure, ...resizeKeepingCorner({ x: Number(structure.x), y: Number(structure.y), w: Number(structure.w), h: Number(structure.h), rot: Number(structure.rot) || 0 }, w, h) })
   }
+
+  // ---- rotation (tables and structures) ----
+  const turnBy = (deg) => {
+    if (table) {
+      const lay = layoutOf(table, tableIndex)
+      place(table, tableIndex, { rot: normRot(lay.rot + deg) })
+    } else if (structure) {
+      saveFloorShape({ ...structure, rot: normRot((Number(structure.rot) || 0) + deg) })
+    }
+  }
+  const currentRot = table ? layoutOf(table, tableIndex).rot : Number(structure?.rot) || 0
+  const rotateButtons = (
+    <>
+      <span style={{ fontSize: 13, marginLeft: 4 }}>Rotate:</span>
+      <button type="button" onClick={() => turnBy(-15)} style={pill(false)}>↺ 15°</button>
+      <button type="button" onClick={() => turnBy(15)} style={pill(false)}>↻ 15°</button>
+      <button type="button" onClick={() => turnBy(90)} style={pill(false)}>90°</button>
+      <button type="button" onClick={() => turnBy(-currentRot)} style={pill(false)} disabled={!currentRot}>Straighten</button>
+      <span style={{ fontSize: 12, opacity: 0.7 }}>{currentRot}°</span>
+    </>
+  )
   const commitLabel = () => {
     if (structure && labelDraft !== (structure.label || '')) saveFloorShape({ ...structure, label: labelDraft.trim() })
   }
@@ -71,7 +92,7 @@ export default function FloorPlanEditor({ areaId, tables, structures = [], saveF
         onSelect={(id, kind) => setSel({ id, kind })}
         onMove={(t, x, y) => place(t, ordered.indexOf(t), { x, y })}
         onMoveStructure={(st, x, y) => saveFloorShape({ ...st, x, y })}
-        onResizeStructure={(st, w, h) => saveFloorShape({ ...st, w, h })}
+        onResizeStructure={(st, box) => saveFloorShape({ ...st, ...box })}
         renderTile={(t) => ({ node: <div className={fp.name}>{t.name}</div> })}
       />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
@@ -83,6 +104,7 @@ export default function FloorPlanEditor({ areaId, tables, structures = [], saveF
             ))}
             <button type="button" onClick={() => scale(0.87)} style={pill(false)}>Smaller</button>
             <button type="button" onClick={() => scale(1.15)} style={pill(false)}>Bigger</button>
+            {rotateButtons}
           </>
         )}
         {structure && (
@@ -95,6 +117,7 @@ export default function FloorPlanEditor({ areaId, tables, structures = [], saveF
             <button type="button" onClick={() => resize(-2, 0)} style={pill(false)}>Narrower</button>
             <button type="button" onClick={() => resize(0, 1)} style={pill(false)}>Taller</button>
             <button type="button" onClick={() => resize(0, -1)} style={pill(false)}>Shorter</button>
+            {rotateButtons}
             <input
               value={labelDraft}
               onChange={e => setLabelDraft(e.target.value)}

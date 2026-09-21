@@ -44,3 +44,6 @@
 .st_outline { background: transparent; border: 2px dashed #7b8794; color: #556; }
 .structureLabel { font-size: 1.6cqw; font-weight: 600; pointer-events: none; }
 .handle { position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; background: var(--navy); border: 2px solid #fff; border-radius: 4px; cursor: nwse-resize; touch-action: none; }
+
+/* Text inside a turned table stays upright */
+.upright { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; pointer-events: none; }

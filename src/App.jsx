@@ -1523,10 +1523,10 @@ export default function App() {
     const pick = (k) => (table[k] !== undefined ? table[k] : (existing?.[k] ?? null))
     const row = {
       id: existing?.id || newFloorId('t_'), areaId: table.areaId, name, seats: Number.isFinite(seatsNum) ? seatsNum : null, sort,
-      x: pick('x'), y: pick('y'), w: pick('w'), h: pick('h'), shape: pick('shape'),
+      x: pick('x'), y: pick('y'), w: pick('w'), h: pick('h'), shape: pick('shape'), rot: Number(pick('rot')) || 0,
     }
     setFloorTables(prev => (existing ? prev.map(t => (t.id === row.id ? row : t)) : [...prev, row]))
-    sendMenuOp('floor_table', { id: row.id, area_id: row.areaId, name: row.name, seats: row.seats, sort: row.sort, x: row.x, y: row.y, w: row.w, h: row.h, shape: row.shape })
+    sendMenuOp('floor_table', { id: row.id, area_id: row.areaId, name: row.name, seats: row.seats, sort: row.sort, x: row.x, y: row.y, w: row.w, h: row.h, shape: row.shape, rot: row.rot })
     return row
   }, [floorTables, setFloorTables, showToast])
 
@@ -1541,10 +1541,11 @@ export default function App() {
       w: Number(pick('w', 10)), h: Number(pick('h', 3)),
       label: String(pick('label', '') || ''),
       style: ['wall', 'bar', 'outline'].includes(pick('style', 'wall')) ? pick('style', 'wall') : 'wall',
+      rot: Number(pick('rot', 0)) || 0,
     }
     if (!row.areaId) return null
     setFloorShapes(prev => (existing ? prev.map(s => (s.id === row.id ? row : s)) : [...prev, row]))
-    sendMenuOp('floor_shape', { id: row.id, area_id: row.areaId, x: row.x, y: row.y, w: row.w, h: row.h, label: row.label, style: row.style })
+    sendMenuOp('floor_shape', { id: row.id, area_id: row.areaId, x: row.x, y: row.y, w: row.w, h: row.h, label: row.label, style: row.style, rot: row.rot })
     return row
   }, [floorShapes, setFloorShapes])
 

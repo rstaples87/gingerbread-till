@@ -153,10 +153,11 @@ export async function fetchMenuFromSupabase() {
         x: r.x != null ? Number(r.x) : null, y: r.y != null ? Number(r.y) : null,
         w: r.w != null ? Number(r.w) : null, h: r.h != null ? Number(r.h) : null,
         shape: r.shape ?? null,
+        rot: r.rot != null ? Number(r.rot) : 0,
       }))
       : null
     const floorShapes = fsh.data
-      ? fsh.data.map(r => ({ id: r.id, areaId: r.area_id, x: Number(r.x), y: Number(r.y), w: Number(r.w), h: Number(r.h), label: r.label ?? '', style: r.style || 'wall' }))
+      ? fsh.data.map(r => ({ id: r.id, areaId: r.area_id, x: Number(r.x), y: Number(r.y), w: Number(r.w), h: Number(r.h), label: r.label ?? '', style: r.style || 'wall', rot: r.rot != null ? Number(r.rot) : 0 }))
       : null
     return { products, variants, stockDefinitions, categories, optionGroups, floorAreas, floorTables, floorShapes }
   } catch (err) {
