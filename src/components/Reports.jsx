@@ -155,6 +155,30 @@ export default function Reports({ stockDefinitions = [], stockItems = {}, produc
               </table>
             </div>
 
+            {report.discounts.lines > 0 && (
+              <div className={styles.section}>
+                <div className={styles.h}>Discounts and comps</div>
+                <div className={styles.grid}>
+                  <div className={styles.card}><div className={styles.label}>Given away</div><div className={styles.value}>{money(report.discounts.amount)}</div><div className={styles.sub}>{report.discounts.lines} {report.discounts.lines === 1 ? 'line' : 'lines'}</div></div>
+                  <div className={styles.card}><div className={styles.label}>Of which comps (free)</div><div className={styles.value}>{money(report.discounts.comps)}</div><div className={styles.sub}>{report.discounts.compLines} {report.discounts.compLines === 1 ? 'line' : 'lines'}</div></div>
+                </div>
+                <table className={styles.table}>
+                  <thead><tr><th>Reason</th><th className={styles.num}>Lines</th><th className={styles.num}>Comps</th><th className={styles.num}>Total</th></tr></thead>
+                  <tbody>
+                    {report.byReason.map(r => (
+                      <tr key={r.reason}>
+                        <td>{r.reason}</td>
+                        <td className={styles.num}>{r.lines}</td>
+                        <td className={styles.num}>{money(r.comps)}</td>
+                        <td className={styles.num}>{money(r.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className={styles.foot}>Sales totals above are after discounts. Voided sales are left out.</div>
+              </div>
+            )}
+
             <div className={styles.section}>
               <div className={styles.h}>Sales by time</div>
               <div className={styles.controls}>

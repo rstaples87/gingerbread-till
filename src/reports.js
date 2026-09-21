@@ -8,12 +8,17 @@ const DEFAULT_RATE = 20
 
 function lineFacts(item) {
   const qty = Number(item?.qty) || 0
-  const gross = (Number(item?.price) || 0) * qty
+  // Takings are what was actually charged: list price less any discount or comp on the line.
+  const discount = Math.min((Number(item?.price) || 0) * qty, Math.max(0, Number(item?.discount) || 0))
+  const gross = (Number(item?.price) || 0) * qty - discount
   const rate = Number.isFinite(Number(item?.vatRate)) && item?.vatRate !== null && item?.vatRate !== undefined
     ? Number(item.vatRate)
     : DEFAULT_RATE
   const net = gross / (1 + rate / 100)
-  return { qty, gross, net, vat: gross - net, group: item?.group === 'food' ? 'food' : 'drink' }
+  return {
+    qty, gross, net, vat: gross - net, group: item?.group === 'food' ? 'food' : 'drink',
+    discount, comp: Boolean(item?.comp) && discount > 0, reason: item?.discountReason || 'Other',
+  }
 }
 
 const blank = () => ({ gross: 0, net: 0, vat: 0, qty: 0 })
@@ -31,6 +36,8 @@ export function buildSalesReport(transactions) {
   const byPayment = {}
   const byItem = new Map()
   const byHour = Array.from({ length: 24 }, () => blank())
+  const discounts = { amount: 0, lines: 0, comps: 0, compLines: 0 }
+  const byReason = new Map()
   const byDay = new Map()
 
   for (const tx of transactions || []) {
@@ -45,6 +52,16 @@ export function buildSalesReport(transactions) {
 
     for (const item of items) {
       const f = lineFacts(item)
+      if (f.discount > 0) {
+        discounts.amount += f.discount
+        discounts.lines += 1
+        if (f.comp) { discounts.comps += f.discount; discounts.compLines += 1 }
+        const r = byReason.get(f.reason) || { reason: f.reason, amount: 0, lines: 0, comps: 0 }
+        r.amount += f.discount
+        r.lines += 1
+        if (f.comp) r.comps += f.discount
+        byReason.set(f.reason, r)
+      }
       add(summary, f)
       add(byGroup[f.group], f)
       byPayment[pay].gross += f.gross
@@ -64,6 +81,8 @@ export function buildSalesReport(transactions) {
     summary,
     byGroup,
     byPayment,
+    discounts,
+    byReason: Array.from(byReason.values()).sort((a, b) => b.amount - a.amount),
     byItem: Array.from(byItem.values()).sort((a, b) => b.gross - a.gross),
     byHour,
     byDay: Array.from(byDay.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([day, v]) => ({ day, ...v })),

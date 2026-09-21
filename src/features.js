@@ -26,4 +26,6 @@ export const features = {
   tables: isPosMode,
   // Kitchen display + bar display: one send from the till splits food (kitchen) and drinks (bar). POS only.
   stations: isPosMode,
+  // Discounts and comps (free items) on tables, tabs and quick sales. POS only.
+  discounts: isPosMode,
 }

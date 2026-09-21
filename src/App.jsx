@@ -18,6 +18,7 @@ import ManagerGate from './components/ManagerGate'
 import Reports from './components/Reports'
 import Tables from './components/Tables'
 import SplitBill from './components/SplitBill'
+import DiscountSheet from './components/DiscountSheet'
 import { sendStationNotice, stationsFor } from './displayNotices'
 import { features, isPosMode } from './features'
 
@@ -28,7 +29,7 @@ const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
 const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
 const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData, takeItemsPart, takeEvenShare } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData, takeItemsPart, takeEvenShare, allocateDiscount, clearDiscount, lineAmount } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -667,6 +668,7 @@ export default function App() {
 
   // Manager PIN unlock: opens Settings, Sales/close till and staff admin for 10 minutes.
   const [splitTabId, setSplitTabId] = useState(null)
+  const [discountTabId, setDiscountTabId] = useState(null)
   const [managerUnlockAt, setManagerUnlockAt] = useState(null)
   const managerUnlocked = managerUnlockAt != null
   const unlockManager = useCallback(() => setManagerUnlockAt(Date.now()), [])
@@ -1227,8 +1229,12 @@ export default function App() {
 
   const processCharge = useCallback((payment, extras = {}) => {
     const order = orders['quick'] || {}
-    const items = orderToItems(order, products)
-    const total = getOrderTotal(order, products)
+    const listItems = orderToItems(order, products)
+    // A discount or comp on the whole sale is shared across its lines, so VAT and food/drink figures stay right.
+    const items = extras.discount ? allocateDiscount(listItems, { ...extras.discount, lines: 'all' }) : listItems
+    const total = extras.discount
+      ? Math.round(items.reduce((s, i) => s + lineAmount(i), 0) * 100) / 100
+      : getOrderTotal(order, products)
     items.forEach(i => {
       const p = products.find(x => x.id === i.productId || x.name === i.name)
       if (p && p.group !== 'food') {
@@ -1472,6 +1478,35 @@ export default function App() {
     }
     return { ok: true, closed: closing, amount: part.amount }
   }, [openTabs, addTransaction, activeSaleStaff, setOpenTabs, setOrders, activeOrderKey, switchOrder, showToast])
+
+  /** Apply / remove a discount or comp on a table's bill lines. */
+  const applyTabDiscount = useCallback((tabId, spec) => {
+    setOpenTabs(prev => {
+      let updated = null
+      const next = prev.map(t => {
+        if (t.id !== tabId) return t
+        updated = { ...t, items: allocateDiscount(t.items, spec) }
+        return updated
+      })
+      if (updated) syncTabToSupabase(updated)
+      return next
+    })
+    showToast(spec.kind === 'comp' ? 'Comp applied' : 'Discount applied')
+  }, [setOpenTabs, showToast])
+
+  const clearTabDiscount = useCallback((tabId, lines) => {
+    setOpenTabs(prev => {
+      let updated = null
+      const next = prev.map(t => {
+        if (t.id !== tabId) return t
+        updated = { ...t, items: clearDiscount(t.items, lines) }
+        return updated
+      })
+      if (updated) syncTabToSupabase(updated)
+      return next
+    })
+    showToast('Discount removed')
+  }, [setOpenTabs, showToast])
 
   const updateTabLimit = useCallback((tabId, newLimit) => {
     const n = Number(newLimit)
@@ -1882,7 +1917,7 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
-    updateTabDetails, moveTab, mergeTabs, openSplit: (id) => setSplitTabId(id),
+    updateTabDetails, moveTab, mergeTabs, openSplit: (id) => setSplitTabId(id), openDiscount: (id) => setDiscountTabId(id),
     floorAreas, floorTables, floorShapes, saveFloorTable, deleteFloorTable, addFloorTableRange,
     saveFloorShape, deleteFloorShape,
     saveFloorArea, deleteFloorArea,
@@ -1936,6 +1971,21 @@ export default function App() {
           onClose={() => setStaffOverlayOpen(false)}
         />
       )}
+      {features.discounts && discountTabId && hydratedTabs.some(t => t.id === discountTabId) && (() => {
+        const dTab = hydratedTabs.find(t => t.id === discountTabId)
+        return (
+          <DiscountSheet
+            title={`Discount / comp — ${tabLabel(dTab)}`}
+            items={dTab.items}
+            onApply={(spec) => { applyTabDiscount(discountTabId, spec); setDiscountTabId(null) }}
+            onClear={(lines) => { clearTabDiscount(discountTabId, lines); setDiscountTabId(null) }}
+            onClose={() => setDiscountTabId(null)}
+            managerUnlocked={managerUnlocked}
+            verifyManagerPin={verifyManagerPin}
+            unlockManager={unlockManager}
+          />
+        )
+      })()}
       {features.tables && splitTabId && hydratedTabs.some(t => t.id === splitTabId) && (
         <SplitBill
           tab={hydratedTabs.find(t => t.id === splitTabId)}

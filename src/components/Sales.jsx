@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { flushSync } from 'react-dom'
-import { fmt, mixerBottleDeductionForLine, formatStockItemQuantity, localSessionDateString, saleLineText } from '../utils'
+import { fmt, mixerBottleDeductionForLine, formatStockItemQuantity, localSessionDateString, saleLineText, lineAmount } from '../utils'
 import { features } from '../features'
 import { buildEodReportData } from '../eodReports'
 import { persistEodReportEntryRemote } from '../eodReportsSupabase'
@@ -142,7 +142,7 @@ function buildDrinksSoldByCategory(products, live) {
         byKey[key] = { name: p.name, category: p.category, qty: 0, revenue: 0 }
       }
       byKey[key].qty += i.qty
-      byKey[key].revenue += i.price * i.qty
+      byKey[key].revenue += lineAmount(i)
     }
   }
   const out = {}

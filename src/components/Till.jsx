@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel } from '../utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel, allocateDiscount, lineAmount } from '../utils'
+import DiscountSheet from './DiscountSheet'
 import { features } from '../features'
 import { supabase } from '../supabase'
 import { logSupabaseWrite } from '../supabaseWriteLog'
@@ -21,6 +22,7 @@ export default function Till({
   orders, updateOrder, clearOrder, activeOrderKey, switchOrder,
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
   processCharge, showToast, currentStaff, settleTab, optionGroups = [],
+  managerUnlocked, verifyManagerPin, unlockManager,
 }) {
   const [hiddenCats, setHiddenCats] = useState(() => {
     const list = tillCategories?.length ? [...tillCategories] : [...CATEGORIES]
@@ -42,6 +44,8 @@ export default function Till({
   const [postAddBdsPrompt, setPostAddBdsPrompt] = useState(null) // { payload } for bar_orders insert
   const [postSendBdsPrompt, setPostSendBdsPrompt] = useState(false)
   const [tabOrderNotes, setTabOrderNotes] = useState('')
+  const [quickDiscount, setQuickDiscount] = useState(null) // { kind, value, reason, sig } for the sale being rung up
+  const [discountOpen, setDiscountOpen] = useState(false)
   const stockItemById = Object.fromEntries(stockDefinitions.map(i => [i.id, i]))
 
   const variantDisplayName = (stockId) => (stockId ? stockItemById[stockId]?.name : null) || null
@@ -53,8 +57,24 @@ export default function Till({
   const order = orders[activeOrderKey] || {}
   const categories = tillCategories?.length ? tillCategories : CATEGORIES
   const isTab = activeOrderKey !== 'quick'
-  const total = getOrderTotal(order, products)
   const hasItems = Object.keys(order).length > 0
+  // A discount/comp on the current sale applies only to the order as it was when the discount was given.
+  const orderSig = JSON.stringify(order)
+  const activeDiscount = features.discounts && !isTab && quickDiscount && quickDiscount.sig === orderSig ? quickDiscount : null
+  const saleItems = activeDiscount
+    ? allocateDiscount(orderToItems(order, products), { ...activeDiscount, lines: 'all' })
+    : null
+  const discountOff = saleItems ? saleItems.reduce((s, i) => s + (Number(i.discount) || 0), 0) : 0
+  const total = saleItems
+    ? Math.round(saleItems.reduce((s, i) => s + lineAmount(i), 0) * 100) / 100
+    : getOrderTotal(order, products)
+  useEffect(() => {
+    if (quickDiscount && (isTab || quickDiscount.sig !== orderSig)) {
+      setQuickDiscount(null)
+      if (!isTab && hasItems) showToast('Discount removed because the order changed')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the order changing
+  }, [orderSig, isTab])
 
   // Low stock banner
   const getCombinedVariantStock = (productId) => {
@@ -377,7 +397,8 @@ export default function Till({
       const kitchen = buildStationPayloads({ tabName: 'Quick sale', notes: noteTrim || null, kitchenOnly: true })
       if (kitchen.length) sendToStations(kitchen)
     }
-    processCharge(confPayment, extras)
+    processCharge(confPayment, { ...extras, ...(activeDiscount ? { discount: { kind: activeDiscount.kind, value: activeDiscount.value, reason: activeDiscount.reason } } : {}) })
+    setQuickDiscount(null)
     setTabOrderNotes('')
     setChargeModal(false)
     setCashTendered('')
@@ -809,6 +830,29 @@ export default function Till({
           />
         </div>
         <div className={styles.orderFooter}>
+          {features.discounts && !isTab && hasItems && (
+            <div className={styles.totalRow}>
+              {activeDiscount ? (
+                <>
+                  <span className={styles.totalLabel}>
+                    {activeDiscount.kind === 'comp' ? 'Comp' : 'Discount'} ({activeDiscount.reason})
+                  </span>
+                  <span className={styles.totalAmount}>
+                    −{fmt(discountOff)}{' '}
+                    <button type="button" onClick={() => setQuickDiscount(null)} aria-label="Remove discount" style={{ border: 'none', background: 'none', color: 'var(--red)', fontSize: 16 }}>✕</button>
+                  </span>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setDiscountOpen(true)}
+                  style={{ border: '1px solid var(--border)', background: 'var(--white)', borderRadius: 10, padding: '7px 12px', fontSize: 14 }}
+                >
+                  Discount / comp
+                </button>
+              )}
+            </div>
+          )}
           <div className={styles.totalRow}>
             <span className={styles.totalLabel}>Total</span>
             <span className={styles.totalAmount}>{fmt(total)}</span>
@@ -895,6 +939,19 @@ export default function Till({
           </div>
         </div>
       </div>
+
+      {discountOpen && (
+        <DiscountSheet
+          title="Discount / comp — this sale"
+          items={orderToItems(order, products)}
+          allowLines={false}
+          onApply={(spec) => { setQuickDiscount({ kind: spec.kind, value: spec.value, reason: spec.reason, sig: orderSig }); setDiscountOpen(false) }}
+          onClose={() => setDiscountOpen(false)}
+          managerUnlocked={managerUnlocked}
+          verifyManagerPin={verifyManagerPin}
+          unlockManager={unlockManager}
+        />
+      )}
 
       {/* Numpad overlay */}
       {numpad && (
@@ -1041,7 +1098,7 @@ export default function Till({
             <div className={styles.sheetTitle}>Confirm charge</div>
             <div className={styles.sheetAmount}>{fmt(total)}</div>
             <div className={styles.sheetItems}>
-              {orderToItems(order, products).map(saleLineText).join('\n')}
+              {(saleItems || orderToItems(order, products)).map(saleLineText).join('\n')}
             </div>
             <div className={styles.sheetPayLabel}>Payment method</div>
             <div className={styles.sheetPayRow}>

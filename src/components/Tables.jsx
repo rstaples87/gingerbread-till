@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fmt, tabTotal, saleLineText, tabLabel, tableLabel } from '../utils'
+import { fmt, tabTotal, saleLineText, tabLabel, tableLabel, lineAmount } from '../utils'
 import FloorPlan from './FloorPlan'
 import fp from './FloorPlan.module.css'
 import styles from './Tables.module.css'
@@ -19,7 +19,7 @@ function openFor(openedAt, now) {
 
 export default function Tables({
   floorAreas = [], floorTables = [], floorShapes = [], openTabs = [],
-  openNewTabEntry, updateTabDetails, moveTab, mergeTabs, openSplit, switchOrder, goToTill, showToast,
+  openNewTabEntry, updateTabDetails, moveTab, mergeTabs, openSplit, openDiscount, switchOrder, goToTill, showToast,
 }) {
   const areas = useMemo(
     () => [...floorAreas].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name)),
@@ -311,7 +311,7 @@ export default function Tables({
                       // eslint-disable-next-line react/no-array-index-key
                       <div key={idx} className={styles.itemRow}>
                         <span>{saleLineText(i)}</span>
-                        <span>{fmt(i.price * i.qty)}</span>
+                        <span>{fmt(lineAmount(i))}</span>
                       </div>
                     ))
                     : <div className={styles.empty}>Nothing ordered yet.</div>}
@@ -322,7 +322,7 @@ export default function Tables({
                 {card.mode === 'open' && (
                   <div className={styles.pair}>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); openSplit(card.tabId); setCard(null) }}>Split the bill</button>
-                    <span />
+                    <button type="button" className={styles.skip} onClick={() => { saveCard(); openDiscount(card.tabId); setCard(null) }}>Discount / comp</button>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'move', tabId: card.tabId }); setCard(null) }}>Move to another table</button>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'merge', tabId: card.tabId }); setCard(null) }}>Merge with another table</button>
                   </div>

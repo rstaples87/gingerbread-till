@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, tabTotal, saleLineText, tabLabel } from '../utils'
+import { fmt, tabTotal, saleLineText, tabLabel, lineAmount } from '../utils'
 import { features } from '../features'
 import styles from './TabsView.module.css'
 
-export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, switchOrder, showToast, updateTabLimit, openSplit }) {
+export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, switchOrder, showToast, updateTabLimit, openSplit, openDiscount }) {
   const [settleModal, setSettleModal] = useState(null) // tabId
   const [settlePayment, setSettlePayment] = useState('cash')
   const [cashTendered, setCashTendered] = useState('')
@@ -144,7 +144,7 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
                 </div>
                 <div className={styles.cardItems}>
                   {tab.items.length
-                    ? tab.items.map(i => `${saleLineText(i)} — ${fmt(i.price * i.qty)}`).join('\n')
+                    ? tab.items.map(i => `${saleLineText(i)} — ${fmt(lineAmount(i))}`).join('\n')
                     : 'No items yet'}
                 </div>
                 <div className={styles.cardBtns}>
@@ -152,6 +152,9 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
                   <button className={`${styles.btn} ${styles.btnSettle}`} onClick={() => handleSettle(tab.id)}>Settle</button>
                   {features.tables && tab.items.length > 0 && (
                     <button className={`${styles.btn} ${styles.btnSettle}`} onClick={() => openSplit(tab.id)}>Split</button>
+                  )}
+                  {features.discounts && tab.items.length > 0 && (
+                    <button className={`${styles.btn} ${styles.btnSettle}`} onClick={() => openDiscount(tab.id)}>Discount</button>
                   )}
                   <button className={`${styles.btn} ${styles.btnCancel}`} onClick={() => { if (confirm('Cancel this tab? Items will be discarded.')) cancelTab(tab.id) }}>Cancel</button>
                 </div>

@@ -1,0 +1,24 @@
+.overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: flex-end; justify-content: center; z-index: 650; }
+.sheet { background: var(--white); width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; border-radius: 18px 18px 0 0; padding: 18px 18px 26px; display: flex; flex-direction: column; gap: 10px; }
+.title { font-size: 19px; font-weight: 700; color: var(--navy); }
+.label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.hint { font-size: 13px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { padding: 9px 14px; border-radius: 16px; border: 1px solid var(--border); background: var(--white); font-size: 14px; }
+.chipOn { background: var(--accent); border-color: var(--accent-dark); font-weight: 700; }
+.list { border: 1px solid var(--border); border-radius: 12px; max-height: 190px; overflow-y: auto; }
+.row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.row:last-child { border-bottom: none; }
+.row input { width: 20px; height: 20px; }
+.rowOn { background: rgba(136, 196, 221, 0.25); }
+.rowText { flex: 1; }
+.rowAmt { font-variant-numeric: tabular-nums; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.segBtn { padding: 11px 6px; border-radius: 12px; border: 1px solid var(--border); background: var(--white); font-size: 15px; }
+.segOn { background: var(--accent); border-color: var(--accent-dark); font-weight: 700; }
+.input { width: 90px; padding: 9px 10px; font-size: 16px; border: 1px solid var(--border); border-radius: 10px; }
+.preview { background: var(--bg); border-radius: 10px; padding: 10px 12px; font-size: 15px; }
+.primary { padding: 15px; border: none; border-radius: 12px; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+.primary:disabled { opacity: 0.4; }
+.remove { padding: 10px; border: 1px solid var(--red); color: var(--red); background: var(--white); border-radius: 12px; font-size: 14px; }
+.cancel { padding: 8px; border: none; background: none; color: var(--muted); font-size: 14px; }

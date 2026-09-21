@@ -119,7 +119,7 @@ export function stationTickets(items, base, { kitchenOnly = false } = {}) {
   const make = (station, list) => (list.length ? {
     ...base,
     items: list.map(({ group: _group, ...rest }) => rest),
-    total: Math.round(list.reduce((sum, i) => sum + i.price * i.qty, 0) * 100) / 100,
+    total: Math.round(list.reduce((sum, i) => sum + lineAmount(i), 0) * 100) / 100,
     station,
   } : null)
   return [
@@ -160,6 +160,71 @@ export function mergeTabData(dst, src) {
   return merged
 }
 
+/** Why money is given away. Shown as buttons when a discount or comp is applied, and totalled in Reports. */
+export const DISCOUNT_REASONS = ['Complaint', "Manager's drink", 'Staff meal', 'Promotion', 'Other']
+
+/** What a sale/bill line is worth after any discount or comp (price is per unit; discount is for the whole line). */
+export const lineAmount = (i) => Math.max(0, i.price * i.qty - (Number(i.discount) || 0))
+
+/**
+ * Apply a discount to a bill's lines. spec: { kind: 'percent' | 'amount' | 'comp', value, reason, lines: 'all' | [indexes] }.
+ * 'percent' takes that % off each chosen line; 'amount' takes a £ amount off the chosen lines (shared out in proportion,
+ * so VAT and food/drink figures stay right); 'comp' makes them free. Replaces any earlier discount on those lines.
+ * Each discounted line gets: discount (£ for the whole line), discountReason, comp (true if free), discountPct (for %).
+ */
+export function allocateDiscount(items, spec) {
+  const chosen = spec.lines === 'all' || !spec.lines ? items.map((_, i) => i) : spec.lines
+  const out = items.map(i => {
+    const { discount: _d, discountReason: _r, comp: _c, discountPct: _p, ...rest } = i
+    return { ...rest }
+  })
+  const bases = chosen.map(idx => Math.max(0, items[idx].price * items[idx].qty))
+  const baseTotal = bases.reduce((s, b) => s + b, 0)
+  if (baseTotal <= 0) return out
+  const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
+  let amounts
+  if (spec.kind === 'comp') {
+    amounts = bases.map(b => round2(b))
+  } else if (spec.kind === 'percent') {
+    const pct = Math.min(100, Math.max(0, Number(spec.value) || 0))
+    amounts = bases.map(b => round2((b * pct) / 100))
+  } else {
+    const off = Math.min(baseTotal, Math.max(0, Number(spec.value) || 0))
+    let given = 0
+    amounts = bases.map((b, k) => {
+      const a = k === bases.length - 1 ? round2(off - given) : round2((off * b) / baseTotal)
+      given = round2(given + a)
+      return Math.min(b, Math.max(0, a))
+    })
+  }
+  chosen.forEach((idx, k) => {
+    if (amounts[k] > 0) {
+      out[idx].discount = amounts[k]
+      out[idx].discountReason = spec.reason || 'Other'
+      if (spec.kind === 'comp') out[idx].comp = true
+      if (spec.kind === 'percent') out[idx].discountPct = Math.min(100, Math.max(0, Number(spec.value) || 0))
+    }
+  })
+  return out
+}
+
+/** Remove discounts/comps from the chosen lines. */
+export function clearDiscount(items, lines = 'all') {
+  const chosen = lines === 'all' ? items.map((_, i) => i) : lines
+  return items.map((i, idx) => {
+    if (!chosen.includes(idx)) return { ...i }
+    const { discount: _d, discountReason: _r, comp: _c, discountPct: _p, ...rest } = i
+    return rest
+  })
+}
+
+/** Text for a line's discount: "COMP (Complaint)" or "−£2.00 (Promotion)". Empty if none. */
+export const discountText = (i) => {
+  if (!i?.comp && !(Number(i?.discount) > 0)) return ''
+  const why = i.discountReason ? ` (${i.discountReason})` : ''
+  return i.comp ? `COMP${why}` : `−£${Number(i.discount).toFixed(2)}${why}`
+}
+
 /** Quantity for display: whole numbers as they are, part-shares (from an even split) to 2 decimals. */
 export const fmtQty = (q) => {
   const n = Number(q) || 0
@@ -168,7 +233,14 @@ export const fmtQty = (q) => {
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
 const round6 = (n) => Math.round(Number(n) * 1e6) / 1e6
-const linesTotal = (lines) => round2(lines.reduce((s, i) => s + i.price * i.qty, 0))
+const linesTotal = (lines) => round2(lines.reduce((s, i) => s + lineAmount(i), 0))
+
+/** A line with its quantity changed; any discount shrinks with it. */
+const withQty = (it, qty) => {
+  const next = { ...it, qty: round6(qty) }
+  if (Number(it.discount) > 0) next.discount = round6((Number(it.discount) * qty) / it.qty)
+  return next
+}
 
 /**
  * Split a bill by items: take `picks` ({ lineIndex: qtyTaken }) off `items`.
@@ -179,9 +251,9 @@ export function takeItemsPart(items, picks) {
   const remaining = []
   items.forEach((it, idx) => {
     const take = Math.min(Number(it.qty), Math.max(0, Number(picks?.[idx]) || 0))
-    if (take > 1e-9) lines.push({ ...it, qty: round6(take) })
+    if (take > 1e-9) lines.push(withQty(it, take))
     const left = Number(it.qty) - take
-    if (left > 1e-9) remaining.push({ ...it, qty: round6(left) })
+    if (left > 1e-9) remaining.push(withQty(it, left))
   })
   return { lines, remaining, amount: linesTotal(lines) }
 }
@@ -198,13 +270,13 @@ export function takeEvenShare(items, people) {
   }
   const amount = round2(total / people)
   const s = amount / total
-  const lines = items.map(i => ({ ...i, qty: round6(i.qty * s) })).filter(i => i.qty > 1e-9)
-  const remaining = items.map(i => ({ ...i, qty: round6(i.qty * (1 - s)) })).filter(i => i.qty > 1e-9)
+  const lines = items.map(i => withQty(i, i.qty * s)).filter(i => i.qty > 1e-9)
+  const remaining = items.map(i => withQty(i, i.qty * (1 - s))).filter(i => i.qty > 1e-9)
   return { lines, remaining, amount: linesTotal(lines) }
 }
 
 export const tabTotal = tab =>
-  tab.items.reduce((s, i) => s + i.price * i.qty, 0)
+  round2(tab.items.reduce((s, i) => s + lineAmount(i), 0))
 
 export const itemsText = items =>
   items.map(i => {
@@ -215,5 +287,6 @@ export const itemsText = items =>
 /** One-line text for a sale line, used in sales lists: "2× Sirloin (Medium rare, Chips — “sauce on side”)". */
 export const saleLineText = i => {
   const detail = lineDetailText(i)
-  return `${fmtQty(i.qty)}× ${i.name}${detail ? ' (' + detail + ')' : ''}`
+  const disc = discountText(i)
+  return `${fmtQty(i.qty)}× ${i.name}${detail ? ' (' + detail + ')' : ''}${disc ? ' — ' + disc : ''}`
 }
