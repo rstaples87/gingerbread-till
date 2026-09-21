@@ -15,7 +15,7 @@ import { useVenueAuth, signOutVenue } from './auth'
 import VenueSignIn from './components/VenueSignIn'
 import ManagerGate from './components/ManagerGate'
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -1127,7 +1127,7 @@ export default function App() {
             )
           })
           if (ex) ex.qty += qty
-          else newItems.push({ name: itemName, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId })
+          else newItems.push({ name: itemName, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId, ...lineTaxFields(p) })
         })
         updatedTab = { ...tab, items: newItems }
         return updatedTab

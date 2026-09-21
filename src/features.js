@@ -1,0 +1,13 @@
+/**
+ * One codebase, two deployments: the events Till and the Haywain POS.
+ * Which one this build is comes from VITE_APP_MODE ('pos' for the POS; anything else = events Till).
+ * POS-only features are switched on here so the events Till stays exactly as simple as it is today.
+ */
+export const APP_MODE = import.meta.env.VITE_APP_MODE === 'pos' ? 'pos' : 'till'
+export const isPosMode = APP_MODE === 'pos'
+
+export const features = {
+  // VAT rate and food/drink group are always recorded on sales (defaults: 20%, drink);
+  // only the editor fields for changing them are POS-only.
+  taxFieldsInProductEditor: isPosMode,
+}

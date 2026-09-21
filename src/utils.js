@@ -58,6 +58,13 @@ export const getOrderTotal = (order, products) =>
     return sum + (p ? p.price * qty : 0)
   }, 0)
 
+/** VAT rate and food/drink group copied onto every sale line, so past reports never change if a product is edited later. */
+export const DEFAULT_VAT_RATE = 20
+export const lineTaxFields = (p) => ({
+  vatRate: Number(p?.vatRate ?? DEFAULT_VAT_RATE),
+  group: p?.group === 'food' ? 'food' : 'drink',
+})
+
 export const orderToItems = (order, products) =>
   Object.entries(order).map(([id, line]) => {
     const p = products.find(x => x.id === Number(id))
@@ -70,6 +77,7 @@ export const orderToItems = (order, products) =>
       selectedStockId: getLineStockId(line),
       selectedMixerId: getLineMixerId(line),
       displayName: getLineDisplayName(line) || undefined,
+      ...lineTaxFields(p),
     }
   }).filter(Boolean)
 

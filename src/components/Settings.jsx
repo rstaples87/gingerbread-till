@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CATEGORIES, STOCK_CATEGORIES } from '../data'
 import { fmt } from '../utils'
+import { features } from '../features'
 import styles from './Settings.module.css'
 
 const STOCK_UNITS = ['bottle', 'can', 'carton']
@@ -13,6 +14,8 @@ const blankProductForm = {
   category: CATEGORIES[0],
   categoryMode: 'select',
   categoryDraft: '',
+  vatRate: 20,
+  group: 'drink',
   variantType: 'none',
   label: '',
   stockIds: [],
@@ -62,6 +65,8 @@ function productToForm(product, variant, defaultMixerIds) {
     category: product.category,
     categoryMode: 'select',
     categoryDraft: '',
+    vatRate: product.vatRate ?? 20,
+    group: product.group === 'food' ? 'food' : 'drink',
     variantType: getVariantType(variant),
     label: variant?.label || '',
     stockIds: mainStockIds,
@@ -195,8 +200,11 @@ export default function Settings({
       price: Number(productForm.price),
       category: categoryInput,
       stock: productForm.originalProduct?.stock ?? 0,
+      vatRate: Number(productForm.vatRate ?? 20),
+      group: productForm.group === 'food' ? 'food' : 'drink',
     }
     if (!product.name || !product.category || Number.isNaN(product.price)) return
+    if (Number.isNaN(product.vatRate) || product.vatRate < 0 || product.vatRate > 100) return
     if (productForm.categoryMode === 'custom') {
       product.category = saveCategory('till', product.category)
     }
@@ -393,6 +401,21 @@ export default function Settings({
                 category: form.category || tillCategories[0] || CATEGORIES[0],
               }))}
             />
+            {features.taxFieldsInProductEditor && (
+              <>
+                <label className={styles.field}>
+                  <span>VAT rate (%)</span>
+                  <input type="number" min="0" max="100" step="0.5" value={productForm.vatRate} onChange={event => setProductForm(form => ({ ...form, vatRate: event.target.value }))} />
+                </label>
+                <label className={styles.field}>
+                  <span>Food or drink</span>
+                  <select value={productForm.group} onChange={event => setProductForm(form => ({ ...form, group: event.target.value }))}>
+                    <option value="drink">Drink</option>
+                    <option value="food">Food</option>
+                  </select>
+                </label>
+              </>
+            )}
             <label className={styles.field}>
               <span>Variant type</span>
               <select value={productForm.variantType} onChange={event => setProductForm(form => ({ ...form, variantType: event.target.value }))}>
