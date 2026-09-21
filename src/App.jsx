@@ -1234,7 +1234,7 @@ export default function App() {
     const order = orders['quick'] || {}
     const listItems = orderToItems(order, products)
     // A discount or comp on the whole sale is shared across its lines, so VAT and food/drink figures stay right.
-    const items = extras.discount ? allocateDiscount(listItems, { ...extras.discount, lines: 'all' }) : listItems
+    const items = extras.discount ? allocateDiscount(listItems, { ...extras.discount, lines: extras.discount.lines || 'all' }) : listItems
     const total = extras.discount
       ? Math.round(items.reduce((s, i) => s + lineAmount(i), 0) * 100) / 100
       : getOrderTotal(order, products)

@@ -65,7 +65,7 @@ export default function Till({
   const orderSig = JSON.stringify(order)
   const activeDiscount = features.discounts && !isTab && quickDiscount && quickDiscount.sig === orderSig ? quickDiscount : null
   const saleItems = activeDiscount
-    ? allocateDiscount(orderToItems(order, products), { ...activeDiscount, lines: 'all' })
+    ? allocateDiscount(orderToItems(order, products), { ...activeDiscount, lines: activeDiscount.lines || 'all' })
     : null
   const discountOff = saleItems ? saleItems.reduce((s, i) => s + (Number(i.discount) || 0), 0) : 0
   const total = saleItems
@@ -401,7 +401,7 @@ export default function Till({
       const kitchen = buildStationPayloads({ tabName: 'Quick sale', notes: noteTrim || null, kitchenOnly: true })
       if (kitchen.length) sendToStations(kitchen)
     }
-    processCharge(confPayment, { ...extras, ...(activeDiscount ? { discount: { kind: activeDiscount.kind, value: activeDiscount.value, reason: activeDiscount.reason } } : {}) })
+    processCharge(confPayment, { ...extras, ...(activeDiscount ? { discount: { kind: activeDiscount.kind, value: activeDiscount.value, reason: activeDiscount.reason, lines: activeDiscount.lines || 'all' } } : {}) })
     setQuickDiscount(null)
     setTabOrderNotes('')
     setChargeModal(false)
@@ -842,7 +842,7 @@ export default function Till({
               {activeDiscount ? (
                 <>
                   <span className={styles.totalLabel}>
-                    {activeDiscount.kind === 'comp' ? 'Comp' : 'Discount'} ({activeDiscount.reason})
+                    {activeDiscount.kind === 'comp' ? 'Comp' : 'Discount'} ({activeDiscount.reason}){Array.isArray(activeDiscount.lines) ? ` · ${activeDiscount.lines.length} ${activeDiscount.lines.length === 1 ? 'line' : 'lines'}` : ''}
                   </span>
                   <span className={styles.totalAmount}>
                     −{fmt(discountOff)}{' '}
@@ -951,8 +951,8 @@ export default function Till({
         <DiscountSheet
           title="Discount / comp — this sale"
           items={orderToItems(order, products)}
-          allowLines={false}
-          onApply={(spec) => { setQuickDiscount({ kind: spec.kind, value: spec.value, reason: spec.reason, sig: orderSig }); setDiscountOpen(false) }}
+          allowLines
+          onApply={(spec) => { setQuickDiscount({ kind: spec.kind, value: spec.value, reason: spec.reason, lines: spec.lines, sig: orderSig }); setDiscountOpen(false) }}
           onClose={() => setDiscountOpen(false)}
           managerUnlocked={managerUnlocked}
           verifyManagerPin={verifyManagerPin}
