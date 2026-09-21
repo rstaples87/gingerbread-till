@@ -49,7 +49,11 @@ export function useVenueAuth() {
       })
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!alive) return
-      if (session) setRejected(false)
+      if (session) {
+        setRejected(false)
+        // Live updates are subject to the database rules too: make sure realtime carries this login.
+        try { supabase.realtime.setAuth(session.access_token) } catch {}
+      }
       setStored(storedAuthSession())
     })
     return () => {

@@ -761,9 +761,27 @@ export default function App() {
       if (!sessionClearedRef.current) {
         loadTodaySessionTransactionsFromSupabase(transactionsSetterRef.current, [])
       }
+      // Tabs, staff and attendance normally arrive by realtime; refetch them too so a missed live update
+      // can't leave a device stale. Skipped while local changes are still queued, so it can't overwrite them.
+      if (readSyncQueue().length === 0) {
+        const { setOpenTabs: setTabs, setOrders: setOrds, setTabIdCounter: setCounter } = tabsLoadSettersRef.current
+        loadTabsFromSupabase(setTabs, setOrds, setCounter, { retryOnEmpty: true })
+        loadStaffFromSupabase(staffSetterRef.current, null)
+        const { setAttendanceLog: setLog, setCurrentlyIn: setIn } = attendanceLoadersRef.current
+        loadAttendanceFromSupabase(setLog, setIn)
+      }
+    }
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine !== false) refreshFromSupabaseOnFocus()
     }
     window.addEventListener('focus', refreshFromSupabaseOnFocus)
-    return () => window.removeEventListener('focus', refreshFromSupabaseOnFocus)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+    const timer = setInterval(refreshIfVisible, 60_000)
+    return () => {
+      window.removeEventListener('focus', refreshFromSupabaseOnFocus)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+      clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
