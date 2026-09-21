@@ -41,3 +41,7 @@
 .itemRow { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .itemRow:last-child { border-bottom: none; }
 .linkBtn { border: none; background: none; color: var(--accent-dark); font-size: 13px; text-decoration: underline; }
+
+.pickBar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; background: #fff7d6; border-bottom: 1px solid #e6d27a; font-size: 14px; flex-shrink: 0; }
+.pickCancel { padding: 7px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--white); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

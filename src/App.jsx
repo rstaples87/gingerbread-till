@@ -26,7 +26,7 @@ const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
 const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
 const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -1380,6 +1380,45 @@ export default function App() {
     })
   }, [setOpenTabs])
 
+  /** Move an open table's tab to a free table (guests changed table). */
+  const moveTab = useCallback((tabId, table) => {
+    const tab = openTabs.find(t => t.id === tabId)
+    if (!tab || !table) return false
+    if (openTabs.some(t => t.tableId === table.id && t.id !== tabId)) {
+      showToast('That table is already in use')
+      return false
+    }
+    const label = tableLabel(table)
+    const moved = { ...tab, name: label, tableId: table.id }
+    setOpenTabs(prev => prev.map(t => (t.id === tabId ? moved : t)))
+    syncTabToSupabase(moved)
+    showToast(`Moved to ${label}`)
+    return true
+  }, [openTabs, setOpenTabs, showToast])
+
+  /** Merge one open table into another (two parties joining): one bill, the first table closes. */
+  const mergeTabs = useCallback((sourceId, targetId) => {
+    const src = openTabs.find(t => t.id === sourceId)
+    const dst = openTabs.find(t => t.id === targetId)
+    if (!src || !dst || src.id === dst.id) return false
+    const merged = mergeTabData(dst, src)
+    setOpenTabs(prev => prev.filter(t => t.id !== sourceId).map(t => (t.id === targetId ? merged : t)))
+    // Anything still waiting in the source's unsent order moves across too.
+    setOrders(prev => {
+      const n = { ...prev }
+      if (n[sourceId] && Object.keys(n[sourceId]).length) {
+        n[targetId] = mergePreviewIntoTabOrder(n[targetId] || {}, n[sourceId])
+      }
+      delete n[sourceId]
+      return n
+    })
+    syncTabToSupabase(merged)
+    deleteTabFromSupabase(sourceId)
+    if (activeOrderKey === sourceId) switchOrder(targetId)
+    showToast(`Merged into ${tabLabel(merged)}`)
+    return true
+  }, [openTabs, setOpenTabs, setOrders, mergePreviewIntoTabOrder, activeOrderKey, switchOrder, showToast])
+
   const updateTabLimit = useCallback((tabId, newLimit) => {
     const n = Number(newLimit)
     if (Number.isNaN(n)) return
@@ -1789,7 +1828,7 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
-    updateTabDetails,
+    updateTabDetails, moveTab, mergeTabs,
     floorAreas, floorTables, floorShapes, saveFloorTable, deleteFloorTable, addFloorTableRange,
     saveFloorShape, deleteFloorShape,
     saveFloorArea, deleteFloorArea,

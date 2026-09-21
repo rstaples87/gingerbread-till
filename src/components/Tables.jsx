@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fmt, tabTotal, saleLineText, tabLabel } from '../utils'
+import { fmt, tabTotal, saleLineText, tabLabel, tableLabel } from '../utils'
 import FloorPlan from './FloorPlan'
 import fp from './FloorPlan.module.css'
 import styles from './Tables.module.css'
@@ -7,7 +7,7 @@ import styles from './Tables.module.css'
 const STALE_HOURS = 12
 const DRINKS = '__drinks_tabs__'
 
-export const tableLabel = (table) => (/^\d+$/.test(String(table?.name)) ? `Table ${table.name}` : String(table?.name ?? ''))
+export { tableLabel }
 
 function openFor(openedAt, now) {
   const mins = Math.max(0, Math.floor((now - new Date(openedAt).getTime()) / 60000))
@@ -19,7 +19,7 @@ function openFor(openedAt, now) {
 
 export default function Tables({
   floorAreas = [], floorTables = [], floorShapes = [], openTabs = [],
-  openNewTabEntry, updateTabDetails, switchOrder, goToTill, showToast,
+  openNewTabEntry, updateTabDetails, moveTab, mergeTabs, switchOrder, goToTill, showToast,
 }) {
   const areas = useMemo(
     () => [...floorAreas].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name)),
@@ -29,6 +29,8 @@ export default function Tables({
   const [now, setNow] = useState(Date.now())
   // The pop-out card. mode: 'free' (open a table) | 'open' (a table with a tab) | 'drink' (a tab with no table)
   const [card, setCard] = useState(null)
+  // Move / merge: pick a target on the plan. { kind: 'move' | 'merge', tabId }
+  const [pick, setPick] = useState(null)
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000)
@@ -50,8 +52,22 @@ export default function Tables({
   const openCountIn = (id) => floorTables.filter(t => t.areaId === id && tabForTable(t)).length
 
   // Tapping any table (free or open) shows its card; nothing happens until a button is pressed.
+  const isValidTarget = (table) => {
+    if (!pick) return false
+    const tab = tabForTable(table)
+    return pick.kind === 'move' ? !tab : Boolean(tab) && tab.id !== pick.tabId
+  }
+
   const onTable = (table) => {
     const tab = tabForTable(table)
+    if (pick) {
+      if (!isValidTarget(table)) {
+        showToast?.(pick.kind === 'move' ? 'Pick a free table' : 'Pick a table that is open')
+        return
+      }
+      setCard({ mode: 'confirm', kind: pick.kind, tabId: pick.tabId, table })
+      return
+    }
     if (tab) {
       setCard({ mode: 'open', table, tabId: tab.id, customer: tab.customer || '', covers: tab.covers ?? null })
     } else {
@@ -59,7 +75,10 @@ export default function Tables({
     }
   }
 
-  const onDrinksTab = (tab) => setCard({ mode: 'drink', tabId: tab.id, name: tab.name })
+  const onDrinksTab = (tab) => {
+    if (pick) { showToast?.('Pick a table on the plan'); return }
+    setCard({ mode: 'drink', tabId: tab.id, name: tab.name })
+  }
 
   const cardTab = card?.tabId ? openTabs.find(t => t.id === card.tabId) : null
 
@@ -85,6 +104,14 @@ export default function Tables({
     if (!name) return
     openNewTabEntry(name)
     goToTill()
+  }
+
+  const confirmPick = () => {
+    const ok = card.kind === 'move'
+      ? moveTab(card.tabId, card.table)
+      : mergeTabs(card.tabId, tabForTable(card.table).id)
+    if (ok) setPick(null)
+    setCard(null)
   }
 
   const goToOrder = () => {
@@ -120,6 +147,16 @@ export default function Tables({
         </button>
       </div>
 
+      {pick && (
+        <div className={styles.pickBar}>
+          <span>
+            {pick.kind === 'move' ? 'Moving' : 'Merging'} <strong>{tabLabel(openTabs.find(t => t.id === pick.tabId))}</strong>
+            {pick.kind === 'move' ? ': tap the free table to move to.' : ': tap the open table to merge into.'}
+          </span>
+          <button type="button" className={styles.pickCancel} onClick={() => setPick(null)}>Cancel</button>
+        </div>
+      )}
+
       <div className={styles.scroll}>
         {activeArea === DRINKS ? (
           <>
@@ -154,7 +191,7 @@ export default function Tables({
                   // Tiles stay small and readable (round ones especially): just the number and the running total.
                   // Everything else is in the pop-out when the table is tapped.
                   return {
-                    className: tab ? `${fp.open} ${ot.stale ? fp.stale : ''}` : '',
+                    className: `${tab ? `${fp.open} ${ot.stale ? fp.stale : ''}` : ''} ${isValidTarget(table) ? fp.target : ''} ${pick && pick.tabId === tab?.id ? fp.source : ''}`,
                     node: (
                       <>
                         <div className={fp.name}>{table.name}</div>
@@ -178,9 +215,33 @@ export default function Tables({
         <div className={styles.overlay} onClick={() => setCard(null)}>
           <div className={styles.sheet} onClick={e => e.stopPropagation()}>
             <div className={styles.sheetTitle}>
-              {card.mode === 'drink' ? (cardTab?.name || 'Tab') : tableLabel(card.table)}
-              {cardTab?.customer ? <span className={styles.titleSub}> · {cardTab.customer}</span> : null}
+              {card.mode === 'confirm' ? (card.kind === 'move' ? 'Move table' : 'Merge tables') : card.mode === 'drink' ? (cardTab?.name || 'Tab') : tableLabel(card.table)}
+              {card.mode !== 'confirm' && cardTab?.customer ? <span className={styles.titleSub}> · {cardTab.customer}</span> : null}
             </div>
+
+            {card.mode === 'confirm' && cardTab && (() => {
+              const target = card.kind === 'merge' ? tabForTable(card.table) : null
+              return (
+                <>
+                  <div className={styles.sheetSub}>
+                    {card.kind === 'move'
+                      ? `Move ${tabLabel(cardTab)} to ${tableLabel(card.table)}?`
+                      : `Merge ${tabLabel(cardTab)} into ${tabLabel(target)}?`}
+                  </div>
+                  <div className={styles.facts}>
+                    <div><span>{card.kind === 'move' ? 'Bill' : 'Adding'}</span><strong>{fmt(tabTotal(cardTab))}</strong></div>
+                    {cardTab.covers != null && <div><span>Covers</span><strong>{cardTab.covers}</strong></div>}
+                    {target && <div><span>New total</span><strong>{fmt(tabTotal(cardTab) + tabTotal(target))}</strong></div>}
+                  </div>
+                  <div className={styles.sheetSub}>
+                    {card.kind === 'move'
+                      ? 'The order, customer name, covers and time open all go with it. Tickets already sent keep the old table name.'
+                      : `Its items, covers and customer name are added to ${tabLabel(target)}, and ${cardTab.name} is closed.`}
+                  </div>
+                  <button type="button" className={styles.primary} onClick={confirmPick}>{card.kind === 'move' ? 'Move table' : 'Merge tables'}</button>
+                </>
+              )
+            })()}
 
             {card.mode === 'free' && (
               <>
@@ -258,10 +319,16 @@ export default function Tables({
 
                 <button type="button" className={styles.primary} onClick={goToOrder}>Open order</button>
                 <button type="button" className={styles.skip} onClick={() => { saveCard(); showToast?.('Saved'); setCard(null) }}>Save changes</button>
+                {card.mode === 'open' && (
+                  <div className={styles.pair}>
+                    <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'move', tabId: card.tabId }); setCard(null) }}>Move to another table</button>
+                    <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'merge', tabId: card.tabId }); setCard(null) }}>Merge with another table</button>
+                  </div>
+                )}
               </>
             )}
 
-            <button type="button" className={styles.cancel} onClick={() => setCard(null)}>Close</button>
+            <button type="button" className={styles.cancel} onClick={() => setCard(null)}>{card.mode === 'confirm' ? 'Cancel' : 'Close'}</button>
           </div>
         </div>
       )}

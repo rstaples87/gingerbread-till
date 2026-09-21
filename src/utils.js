@@ -131,6 +131,35 @@ export function stationTickets(items, base, { kitchenOnly = false } = {}) {
 /** What staff and tickets call a tab: "Table 6 · Smith" when it has a customer name, else just "Table 6". */
 export const tabLabel = (tab) => (tab?.customer ? `${tab.name} · ${tab.customer}` : String(tab?.name ?? ''))
 
+/** "Table 6" for numbered tables, otherwise the table's own name (e.g. "Milling Room 1"). */
+export const tableLabel = (table) => (/^\d+$/.test(String(table?.name)) ? `Table ${table.name}` : String(table?.name ?? ''))
+
+/**
+ * Merge the tab `src` into the tab `dst` (two parties joining). Same dishes with the same choices/notes add up;
+ * covers are added; both customer names are kept; the earlier open time is kept. Returns the new dst tab.
+ */
+export function mergeTabData(dst, src) {
+  const items = (dst.items || []).map(i => ({ ...i }))
+  for (const it of src.items || []) {
+    const ex = items.find(i =>
+      (i.productId === it.productId || (!i.productId && !it.productId && i.name === it.name)) &&
+      (i.selectedStockId ?? null) === (it.selectedStockId ?? null) &&
+      (i.selectedMixerId ?? null) === (it.selectedMixerId ?? null) &&
+      lineSignature(i.options, i.note) === lineSignature(it.options, it.note))
+    if (ex) ex.qty += it.qty
+    else items.push({ ...it })
+  }
+  const merged = { ...dst, items }
+  if (dst.covers != null || src.covers != null) merged.covers = (dst.covers ?? 0) + (src.covers ?? 0)
+  const names = [...new Set([dst.customer, src.customer].filter(Boolean))]
+  if (names.length) merged.customer = names.join(' & ')
+  else delete merged.customer
+  const a = new Date(dst.openedAt).getTime()
+  const b = new Date(src.openedAt).getTime()
+  if (Number.isFinite(b) && (!Number.isFinite(a) || b < a)) merged.openedAt = src.openedAt
+  return merged
+}
+
 export const tabTotal = tab =>
   tab.items.reduce((s, i) => s + i.price * i.qty, 0)
 
