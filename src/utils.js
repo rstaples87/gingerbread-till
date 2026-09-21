@@ -160,17 +160,60 @@ export function mergeTabData(dst, src) {
   return merged
 }
 
+/** Quantity for display: whole numbers as they are, part-shares (from an even split) to 2 decimals. */
+export const fmtQty = (q) => {
+  const n = Number(q) || 0
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100)
+}
+
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
+const round6 = (n) => Math.round(Number(n) * 1e6) / 1e6
+const linesTotal = (lines) => round2(lines.reduce((s, i) => s + i.price * i.qty, 0))
+
+/**
+ * Split a bill by items: take `picks` ({ lineIndex: qtyTaken }) off `items`.
+ * Returns { lines (what this person pays for), remaining (what is left on the table), amount }.
+ */
+export function takeItemsPart(items, picks) {
+  const lines = []
+  const remaining = []
+  items.forEach((it, idx) => {
+    const take = Math.min(Number(it.qty), Math.max(0, Number(picks?.[idx]) || 0))
+    if (take > 1e-9) lines.push({ ...it, qty: round6(take) })
+    const left = Number(it.qty) - take
+    if (left > 1e-9) remaining.push({ ...it, qty: round6(left) })
+  })
+  return { lines, remaining, amount: linesTotal(lines) }
+}
+
+/**
+ * Split a bill evenly: one of `people` equal shares comes off the bill. The share is rounded to the penny and
+ * every line is scaled by the same fraction, so the sale's lines add up to exactly what was paid.
+ * With one person left, they pay everything that remains.
+ */
+export function takeEvenShare(items, people) {
+  const total = linesTotal(items)
+  if (people <= 1 || total <= 0) {
+    return { lines: items.map(i => ({ ...i })), remaining: [], amount: total }
+  }
+  const amount = round2(total / people)
+  const s = amount / total
+  const lines = items.map(i => ({ ...i, qty: round6(i.qty * s) })).filter(i => i.qty > 1e-9)
+  const remaining = items.map(i => ({ ...i, qty: round6(i.qty * (1 - s)) })).filter(i => i.qty > 1e-9)
+  return { lines, remaining, amount: linesTotal(lines) }
+}
+
 export const tabTotal = tab =>
   tab.items.reduce((s, i) => s + i.price * i.qty, 0)
 
 export const itemsText = items =>
   items.map(i => {
     const detail = lineDetailText(i)
-    return `${i.qty}× ${i.name}${detail ? ' (' + detail + ')' : ''}`
+    return `${fmtQty(i.qty)}× ${i.name}${detail ? ' (' + detail + ')' : ''}`
   }).join('\n')
 
 /** One-line text for a sale line, used in sales lists: "2× Sirloin (Medium rare, Chips — “sauce on side”)". */
 export const saleLineText = i => {
   const detail = lineDetailText(i)
-  return `${i.qty}× ${i.name}${detail ? ' (' + detail + ')' : ''}`
+  return `${fmtQty(i.qty)}× ${i.name}${detail ? ' (' + detail + ')' : ''}`
 }

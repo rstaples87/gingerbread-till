@@ -181,7 +181,7 @@ export default function Reports({ stockDefinitions = [], stockItems = {}, produc
                   {items.map(i => (
                     <tr key={i.name}>
                       <td>{i.name} <span className={styles.sub}>{i.group === 'food' ? 'food' : ''}</span></td>
-                      <td className={styles.num}>{i.qty}</td>
+                      <td className={styles.num}>{round2(i.qty)}</td>
                       <td className={styles.num}>{money(i.gross)}</td>
                       <td className={styles.num}>{money(i.net)}</td>
                     </tr>

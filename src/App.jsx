@@ -17,6 +17,8 @@ import VenueSignIn from './components/VenueSignIn'
 import ManagerGate from './components/ManagerGate'
 import Reports from './components/Reports'
 import Tables from './components/Tables'
+import SplitBill from './components/SplitBill'
+import { sendStationNotice, stationsFor } from './displayNotices'
 import { features, isPosMode } from './features'
 
 // The events Till starts from the built-in bar menu. The Haywain POS starts empty (its menu is entered in Settings),
@@ -26,7 +28,7 @@ const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
 const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
 const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData, takeItemsPart, takeEvenShare } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -664,6 +666,7 @@ export default function App() {
   staffRef.current = staff
 
   // Manager PIN unlock: opens Settings, Sales/close till and staff admin for 10 minutes.
+  const [splitTabId, setSplitTabId] = useState(null)
   const [managerUnlockAt, setManagerUnlockAt] = useState(null)
   const managerUnlocked = managerUnlockAt != null
   const unlockManager = useCallback(() => setManagerUnlockAt(Date.now()), [])
@@ -1380,6 +1383,14 @@ export default function App() {
     })
   }, [setOpenTabs])
 
+  /** Tell the kitchen and/or bar screen about a change to a table that already has tickets (moved, merged). */
+  const notifyStations = useCallback((tab, tabName, text) => {
+    if (!features.stations || !tab?.items?.length) return
+    stationsFor(tab.items).forEach(station => {
+      void sendStationNotice({ station, tabName, text, staff: activeSaleStaff })
+    })
+  }, [activeSaleStaff])
+
   /** Move an open table's tab to a free table (guests changed table). */
   const moveTab = useCallback((tabId, table) => {
     const tab = openTabs.find(t => t.id === tabId)
@@ -1392,9 +1403,10 @@ export default function App() {
     const moved = { ...tab, name: label, tableId: table.id }
     setOpenTabs(prev => prev.map(t => (t.id === tabId ? moved : t)))
     syncTabToSupabase(moved)
+    notifyStations(tab, tabLabel(moved), `⚠ MOVED from ${tabLabel(tab)}`)
     showToast(`Moved to ${label}`)
     return true
-  }, [openTabs, setOpenTabs, showToast])
+  }, [openTabs, setOpenTabs, showToast, notifyStations])
 
   /** Merge one open table into another (two parties joining): one bill, the first table closes. */
   const mergeTabs = useCallback((sourceId, targetId) => {
@@ -1415,9 +1427,51 @@ export default function App() {
     syncTabToSupabase(merged)
     deleteTabFromSupabase(sourceId)
     if (activeOrderKey === sourceId) switchOrder(targetId)
+    notifyStations(src, tabLabel(merged), `⚠ MERGED: ${tabLabel(src)} joined this table`)
     showToast(`Merged into ${tabLabel(merged)}`)
     return true
-  }, [openTabs, setOpenTabs, setOrders, mergePreviewIntoTabOrder, activeOrderKey, switchOrder, showToast])
+  }, [openTabs, setOpenTabs, setOrders, mergePreviewIntoTabOrder, activeOrderKey, switchOrder, showToast, notifyStations])
+
+  /**
+   * Pay part of a table's bill (split bill). spec: { kind: 'items', picks } or { kind: 'even', people }.
+   * Records a separate sale for that part and leaves the rest on the table; when nothing is left the table closes.
+   */
+  const payTabPart = useCallback((tabId, spec, payment) => {
+    const tab = openTabs.find(t => t.id === tabId)
+    if (!tab) return { ok: false }
+    const part = spec.kind === 'even' ? takeEvenShare(tab.items, spec.people) : takeItemsPart(tab.items, spec.picks)
+    if (!part.lines.length || part.amount <= 0) {
+      showToast('Nothing to pay')
+      return { ok: false }
+    }
+    const closing = part.remaining.length === 0
+    addTransaction({
+      id: Date.now(),
+      time: new Date(),
+      total: part.amount,
+      items: part.lines,
+      payment,
+      staff: activeSaleStaff,
+      type: 'tab',
+      tabName: `${tabLabel(tab)} (split)`,
+      // Covers are counted once, on the payment that closes the table.
+      ...(closing && tab.covers != null ? { covers: tab.covers } : {}),
+      voided: false,
+    })
+    if (closing) {
+      deleteTabFromSupabase(tabId)
+      setOpenTabs(prev => prev.filter(t => t.id !== tabId))
+      setOrders(prev => { const n = { ...prev }; delete n[tabId]; return n })
+      if (activeOrderKey === tabId) switchOrder('quick')
+      showToast(`Table settled — ${fmt(part.amount)}`)
+    } else {
+      const updated = { ...tab, items: part.remaining }
+      setOpenTabs(prev => prev.map(t => (t.id === tabId ? updated : t)))
+      syncTabToSupabase(updated)
+      showToast(`Paid ${fmt(part.amount)} — ${fmt(tabTotal(updated))} left`)
+    }
+    return { ok: true, closed: closing, amount: part.amount }
+  }, [openTabs, addTransaction, activeSaleStaff, setOpenTabs, setOrders, activeOrderKey, switchOrder, showToast])
 
   const updateTabLimit = useCallback((tabId, newLimit) => {
     const n = Number(newLimit)
@@ -1828,7 +1882,7 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
-    updateTabDetails, moveTab, mergeTabs,
+    updateTabDetails, moveTab, mergeTabs, openSplit: (id) => setSplitTabId(id),
     floorAreas, floorTables, floorShapes, saveFloorTable, deleteFloorTable, addFloorTableRange,
     saveFloorShape, deleteFloorShape,
     saveFloorArea, deleteFloorArea,
@@ -1880,6 +1934,14 @@ export default function App() {
             showToast('Serving as ' + name)
           }}
           onClose={() => setStaffOverlayOpen(false)}
+        />
+      )}
+      {features.tables && splitTabId && hydratedTabs.some(t => t.id === splitTabId) && (
+        <SplitBill
+          tab={hydratedTabs.find(t => t.id === splitTabId)}
+          hasPending={Object.keys(orders[splitTabId] || {}).length > 0}
+          onPay={(spec, payment) => payTabPart(splitTabId, spec, payment)}
+          onClose={() => setSplitTabId(null)}
         />
       )}
       {showVenueSignIn && (
