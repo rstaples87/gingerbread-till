@@ -25,12 +25,21 @@ function storedAuthSession() {
 export function useVenueAuth() {
   const [stored, setStored] = useState(() => storedAuthSession())
   const [ready, setReady] = useState(!supabase)
+  // True when a session is stored on the device but the server says it's no longer usable (checked online only).
+  const [rejected, setRejected] = useState(false)
 
   useEffect(() => {
     if (!supabase) return undefined
     let alive = true
     // Reads/refreshes the session; its result is not trusted for "signed in" (it fails offline).
     supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (!alive) return
+        const online = typeof navigator === 'undefined' || navigator.onLine !== false
+        const networkProblem = error && (error.name === 'AuthRetryableFetchError' || /fetch|network/i.test(String(error.message)))
+        // Signal loss must never look like a bad login; only an online, non-network refusal does.
+        setRejected(Boolean(online && !data?.session && !networkProblem && storedAuthSession()))
+      })
       .catch(() => {})
       .finally(() => {
         if (alive) {
@@ -38,8 +47,10 @@ export function useVenueAuth() {
           setReady(true)
         }
       })
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      if (alive) setStored(storedAuthSession())
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return
+      if (session) setRejected(false)
+      setStored(storedAuthSession())
     })
     return () => {
       alive = false
@@ -49,7 +60,7 @@ export function useVenueAuth() {
 
   return {
     ready,
-    signedIn: Boolean(stored),
+    signedIn: Boolean(stored) && !rejected,
     email: stored?.user?.email ?? null,
   }
 }
