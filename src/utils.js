@@ -160,6 +160,37 @@ export function mergeTabData(dst, src) {
   return merged
 }
 
+/**
+ * Undo a merge. entry = { src: the source tab as it was when merged, prevCustomer, prevOpenedAt }.
+ * The source gets back only what can still be found on the merged table (anything paid or removed since stays gone),
+ * and those quantities come off the merged table. Covers and customer name go back too.
+ * Returns { dst, src, restored } where src is null when nothing was left to give back.
+ */
+export function unmergeTabData(dst, entry) {
+  const items = (dst.items || []).map(i => ({ ...i }))
+  const restored = []
+  for (const it of entry.src.items || []) {
+    const ex = items.find(i =>
+      (i.productId === it.productId || (!i.productId && !it.productId && i.name === it.name)) &&
+      (i.selectedStockId ?? null) === (it.selectedStockId ?? null) &&
+      (i.selectedMixerId ?? null) === (it.selectedMixerId ?? null) &&
+      lineSignature(i.options, i.note) === lineSignature(it.options, it.note) && i.qty > 0)
+    if (!ex) continue
+    const take = Math.min(ex.qty, it.qty)
+    const before = ex.qty
+    ex.qty = Math.round((ex.qty - take) * 1000) / 1000
+    if (Number(ex.discount) > 0) ex.discount = Math.round(ex.discount * (ex.qty / before) * 100) / 100
+    restored.push(take === it.qty ? { ...it } : { ...it, qty: take, discount: undefined, comp: undefined, discountPct: undefined, discountReason: undefined })
+  }
+  const merged = { ...dst, items: items.filter(i => i.qty > 0) }
+  if (dst.covers != null && entry.src.covers != null) merged.covers = Math.max(0, dst.covers - entry.src.covers)
+  if (entry.prevCustomer) merged.customer = entry.prevCustomer
+  else delete merged.customer
+  if (entry.prevOpenedAt) merged.openedAt = entry.prevOpenedAt
+  const src = { ...entry.src, items: restored.map(i => JSON.parse(JSON.stringify(i))) }
+  return { dst: merged, src, restored: restored.length }
+}
+
 /** Why money is given away. Shown as buttons when a discount or comp is applied, and totalled in Reports. */
 export const DISCOUNT_REASONS = ['Complaint', "Manager's drink", 'Staff meal', 'Promotion', 'Other']
 

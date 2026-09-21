@@ -19,7 +19,7 @@ function openFor(openedAt, now) {
 
 export default function Tables({
   floorAreas = [], floorTables = [], floorShapes = [], openTabs = [],
-  openNewTabEntry, updateTabDetails, moveTab, mergeTabs, openSplit, openDiscount, switchOrder, goToTill, showToast,
+  openNewTabEntry, updateTabDetails, moveTab, mergeTabs, unmergeTab, mergeHistory = {}, openSplit, openDiscount, switchOrder, goToTill, showToast,
 }) {
   const areas = useMemo(
     () => [...floorAreas].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name)),
@@ -325,6 +325,9 @@ export default function Tables({
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); openDiscount(card.tabId); setCard(null) }}>Discount / comp</button>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'move', tabId: card.tabId }); setCard(null) }}>Move to another table</button>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'merge', tabId: card.tabId }); setCard(null) }}>Merge with another table</button>
+                    {(mergeHistory[card.tabId] || []).map(e => (
+                      <button key={e.src.id} type="button" className={styles.skip} onClick={() => { saveCard(); unmergeTab(card.tabId, e.src.id); setCard(null) }}>Undo merge — give back {tabLabel(e.src)}</button>
+                    ))}
                   </div>
                 )}
               </>

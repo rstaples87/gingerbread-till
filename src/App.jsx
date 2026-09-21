@@ -29,7 +29,7 @@ const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
 const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
 const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData, takeItemsPart, takeEvenShare, allocateDiscount, clearDiscount, lineAmount } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData, unmergeTabData, takeItemsPart, takeEvenShare, allocateDiscount, clearDiscount, lineAmount } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -593,6 +593,8 @@ export default function App() {
   const [floorAreas, setFloorAreas] = useLocalStorage('bt_floor_areas', [])
   const [floorTables, setFloorTables] = useLocalStorage('bt_floor_tables', [])
   const [floorShapes, setFloorShapes] = useLocalStorage('bt_floor_shapes', [])
+  // What each merged table absorbed, so a merge can be undone: { [mergedTabId]: [{ src, prevCustomer, prevOpenedAt }] }
+  const [mergeHistory, setMergeHistory] = useLocalStorage('bt_merge_history', {})
   const [categoryState, setCategoryState] = useLocalStorage('bt_categories', { till: [], stock: [] })
   const [stock, setStockRaw] = useLocalStorage('bt_stock', Object.fromEntries(INITIAL_PRODUCTS.map(p => [p.id, p.stock])))
   const [stockItems, setStockItemsRaw] = useLocalStorage('bt_stock_items', Object.fromEntries(INITIAL_STOCK_ITEMS.map(s => [s.id, s.stock])))
@@ -1422,6 +1424,10 @@ export default function App() {
     const dst = openTabs.find(t => t.id === targetId)
     if (!src || !dst || src.id === dst.id) return false
     const merged = mergeTabData(dst, src)
+    setMergeHistory(prev => ({
+      ...prev,
+      [targetId]: [...(prev[targetId] || []), { src: JSON.parse(JSON.stringify(src)), prevCustomer: dst.customer || null, prevOpenedAt: dst.openedAt ?? null }],
+    }))
     setOpenTabs(prev => prev.filter(t => t.id !== sourceId).map(t => (t.id === targetId ? merged : t)))
     // Anything still waiting in the source's unsent order moves across too.
     setOrders(prev => {
@@ -1438,7 +1444,30 @@ export default function App() {
     notifyStations(src, tabLabel(merged), `⚠ MERGED: ${tabLabel(src)} joined this table`)
     showToast(`Merged into ${tabLabel(merged)}`)
     return true
-  }, [openTabs, setOpenTabs, setOrders, mergePreviewIntoTabOrder, activeOrderKey, switchOrder, showToast, notifyStations])
+  }, [openTabs, setOpenTabs, setOrders, setMergeHistory, mergePreviewIntoTabOrder, activeOrderKey, switchOrder, showToast, notifyStations])
+
+  /** Undo a merge: the absorbed table comes back on its own with what is still on the bill. */
+  const unmergeTab = useCallback((targetId, srcId) => {
+    const dst = openTabs.find(t => t.id === targetId)
+    const entry = (mergeHistory[targetId] || []).find(e => e.src.id === srcId)
+    if (!dst || !entry) return false
+    const out = unmergeTabData(dst, entry)
+    const occupied = entry.src.tableId != null && openTabs.some(t => t.id !== targetId && t.tableId === entry.src.tableId)
+    const back = { ...out.src, ...(occupied ? { tableId: undefined } : {}) }
+    setOpenTabs(prev => [...prev.map(t => (t.id === targetId ? out.dst : t)), back])
+    setMergeHistory(prev => {
+      const rest = (prev[targetId] || []).filter(e => e.src.id !== srcId)
+      const next = { ...prev }
+      if (rest.length) next[targetId] = rest
+      else delete next[targetId]
+      return next
+    })
+    syncTabToSupabase(out.dst)
+    syncTabToSupabase(back)
+    notifyStations(back, tabLabel(out.dst), `⚠ SPLIT BACK: ${tabLabel(back)} is its own table again`)
+    showToast(`${tabLabel(back)} is its own table again${occupied ? ' (its table number is taken — set a new one)' : ''}`)
+    return true
+  }, [openTabs, mergeHistory, setOpenTabs, setMergeHistory, notifyStations, showToast])
 
   /**
    * Pay part of a table's bill (split bill). spec: { kind: 'items', picks } or { kind: 'even', people }.
@@ -1921,7 +1950,7 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
-    updateTabDetails, moveTab, mergeTabs, openSplit: (id) => setSplitTabId(id), openDiscount: (id) => setDiscountTabId(id),
+    updateTabDetails, moveTab, mergeTabs, unmergeTab, mergeHistory, openSplit: (id) => setSplitTabId(id), openDiscount: (id) => setDiscountTabId(id),
     floorAreas, floorTables, floorShapes, saveFloorTable, deleteFloorTable, addFloorTableRange,
     saveFloorShape, deleteFloorShape,
     saveFloorArea, deleteFloorArea,
