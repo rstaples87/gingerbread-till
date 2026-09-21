@@ -269,3 +269,6 @@ end $$;
 -- Rotation (degrees clockwise) for tables and walls (added 2026-09-21).
 alter table public.floor_tables add column if not exists rot numeric not null default 0;
 alter table public.floor_shapes add column if not exists rot numeric not null default 0;
+
+-- Customer name on a table/tab (added 2026-09-21).
+alter table public.tabs add column if not exists customer text;

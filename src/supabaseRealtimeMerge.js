@@ -60,6 +60,7 @@ export function normaliseTabRowLive(row) {
     limit: lim != null && lim !== '' ? Number(lim) : undefined,
     tableId: row.table_id ?? undefined,
     covers: row.covers != null ? Number(row.covers) : undefined,
+    customer: row.customer ?? undefined,
   }
 }
 

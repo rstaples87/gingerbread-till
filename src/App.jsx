@@ -26,7 +26,7 @@ const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
 const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
 const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -422,9 +422,12 @@ function tabRowForSupabase(tab) {
   if (tab.limit != null && tab.limit !== '') {
     row.tab_limit = Number(tab.limit)
   }
-  // Table and covers exist only in the POS database.
-  if (tab.tableId) row.table_id = tab.tableId
-  if (tab.covers != null) row.covers = Number(tab.covers)
+  // Table, covers and customer exist only in the POS database (sent explicitly so clearing a value works).
+  if (features.tables) {
+    row.table_id = tab.tableId ?? null
+    row.covers = tab.covers != null ? Number(tab.covers) : null
+    row.customer = tab.customer || null
+  }
   return row
 }
 
@@ -1099,6 +1102,7 @@ export default function App() {
       id, name, items: [], openedAt: new Date(), staff: activeSaleStaff,
       ...(extra.tableId ? { tableId: extra.tableId } : {}),
       ...(extra.covers != null ? { covers: extra.covers } : {}),
+      ...(extra.customer ? { customer: extra.customer } : {}),
     }
     setOpenTabs(prev => [...prev, newTab])
     setOrders(prev => ({ ...prev, [id]: {} }))
@@ -1195,7 +1199,7 @@ export default function App() {
       payment,
       staff: activeSaleStaff,
       type: 'tab',
-      tabName: tab.name,
+      tabName: tabLabel(tab),
       ...(tab.covers != null ? { covers: tab.covers } : {}),
       voided: false,
       ...(payment === 'cash' ? {
@@ -1351,6 +1355,30 @@ export default function App() {
     switchOrder(tabId)
     showToast('Items added to ' + (tabRow.name || 'tab'))
   }, [orders, openTabs, products, setOrders, switchOrder, showToast, mergePreviewIntoTabOrder])
+
+  /** Change a tab's name, customer name or covers after it was opened (null clears covers / customer). */
+  const updateTabDetails = useCallback((tabId, patch) => {
+    setOpenTabs(prev => {
+      let updated = null
+      const next = prev.map(t => {
+        if (t.id !== tabId) return t
+        updated = { ...t }
+        if (patch.name !== undefined && String(patch.name).trim()) updated.name = String(patch.name).trim()
+        if (patch.customer !== undefined) {
+          const c = String(patch.customer || '').trim()
+          if (c) updated.customer = c
+          else delete updated.customer
+        }
+        if (patch.covers !== undefined) {
+          if (patch.covers == null) delete updated.covers
+          else updated.covers = Number(patch.covers)
+        }
+        return updated
+      })
+      if (updated) syncTabToSupabase(updated)
+      return next
+    })
+  }, [setOpenTabs])
 
   const updateTabLimit = useCallback((tabId, newLimit) => {
     const n = Number(newLimit)
@@ -1761,6 +1789,7 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
+    updateTabDetails,
     floorAreas, floorTables, floorShapes, saveFloorTable, deleteFloorTable, addFloorTableRange,
     saveFloorShape, deleteFloorShape,
     saveFloorArea, deleteFloorArea,

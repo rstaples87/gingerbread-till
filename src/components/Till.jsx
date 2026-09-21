@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets } from '../utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel } from '../utils'
 import { features } from '../features'
 import { supabase } from '../supabase'
 import { logSupabaseWrite } from '../supabaseWriteLog'
@@ -554,7 +554,7 @@ export default function Till({
   const handleAddItemsClick = () => {
     if (!hasItems || wouldExceedTabLimit || !isTab || !activeTab) return
     if (features.stations) {
-      const payloads = buildStationPayloads({ tabName: activeTab.name, covers: activeTab.covers, notes: tabOrderNotes.trim() })
+      const payloads = buildStationPayloads({ tabName: tabLabel(activeTab), covers: activeTab.covers, notes: tabOrderNotes.trim() })
       const committed = commitItemsToTab(activeOrderKey)
       if (committed) {
         setTabOrderNotes('')
@@ -582,7 +582,7 @@ export default function Till({
   const handleSendToBar = async () => {
     if (!isTab || !activeTab || !hasItems) return
     if (features.stations) {
-      const payloads = buildStationPayloads({ tabName: activeTab.name, covers: activeTab.covers, notes: tabOrderNotes.trim() })
+      const payloads = buildStationPayloads({ tabName: tabLabel(activeTab), covers: activeTab.covers, notes: tabOrderNotes.trim() })
       if (!payloads.length) return
       if (await sendToStations(payloads)) {
         setTabOrderNotes('')
@@ -665,7 +665,7 @@ export default function Till({
               onClick={() => switchOrder(tab.id)}
             >
               {chipNearLimit && <span className={styles.tabChipWarnMark} aria-hidden>!</span>}
-              {tab.name}
+              {tabLabel(tab)}
             </button>
           )
         })}

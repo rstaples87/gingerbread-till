@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fmt, tabTotal } from '../utils'
+import { fmt, tabTotal, saleLineText, tabLabel } from '../utils'
 import FloorPlan from './FloorPlan'
 import fp from './FloorPlan.module.css'
 import styles from './Tables.module.css'
@@ -19,7 +19,7 @@ function openFor(openedAt, now) {
 
 export default function Tables({
   floorAreas = [], floorTables = [], floorShapes = [], openTabs = [],
-  openNewTabEntry, switchOrder, goToTill, showToast,
+  openNewTabEntry, updateTabDetails, switchOrder, goToTill, showToast,
 }) {
   const areas = useMemo(
     () => [...floorAreas].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name)),
@@ -27,7 +27,8 @@ export default function Tables({
   )
   const [areaId, setAreaId] = useState(null)
   const [now, setNow] = useState(Date.now())
-  const [covers, setCovers] = useState(null) // { table, count }
+  // The pop-out card. mode: 'free' (open a table) | 'open' (a table with a tab) | 'drink' (a tab with no table)
+  const [card, setCard] = useState(null)
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000)
@@ -48,29 +49,60 @@ export default function Tables({
   const drinksTabs = openTabs.filter(t => !t.tableId)
   const openCountIn = (id) => floorTables.filter(t => t.areaId === id && tabForTable(t)).length
 
+  // Tapping any table (free or open) shows its card; nothing happens until a button is pressed.
   const onTable = (table) => {
     const tab = tabForTable(table)
     if (tab) {
-      switchOrder(tab.id)
-      goToTill()
-      return
+      setCard({ mode: 'open', table, tabId: tab.id, customer: tab.customer || '', covers: tab.covers ?? null })
+    } else {
+      setCard({ mode: 'free', table, customer: '', covers: table.seats && table.seats <= 4 ? table.seats : 2 })
     }
-    setCovers({ table, count: table.seats && table.seats <= 4 ? table.seats : 2 })
+  }
+
+  const onDrinksTab = (tab) => setCard({ mode: 'drink', tabId: tab.id, name: tab.name })
+
+  const cardTab = card?.tabId ? openTabs.find(t => t.id === card.tabId) : null
+
+  const saveCard = () => {
+    if (!cardTab) return
+    if (card.mode === 'drink') updateTabDetails(cardTab.id, { name: card.name })
+    else updateTabDetails(cardTab.id, { customer: card.customer, covers: card.covers })
   }
 
   const openTable = (withCovers) => {
-    const { table, count } = covers
-    openNewTabEntry(tableLabel(table), { tableId: table.id, ...(withCovers ? { covers: count } : {}) })
-    setCovers(null)
+    const { table, covers, customer } = card
+    openNewTabEntry(tableLabel(table), {
+      tableId: table.id,
+      ...(withCovers ? { covers } : {}),
+      ...(customer.trim() ? { customer: customer.trim() } : {}),
+    })
+    setCard(null)
     goToTill()
   }
 
   const newDrinksTab = () => {
-    const name = (window.prompt('Name for the drinks tab?') || '').trim()
+    const name = (window.prompt('Name for the drinks tab? (e.g. the customer\'s name)') || '').trim()
     if (!name) return
     openNewTabEntry(name)
     goToTill()
   }
+
+  const goToOrder = () => {
+    saveCard()
+    switchOrder(card.tabId)
+    setCard(null)
+    goToTill()
+  }
+
+  const stepper = (value, onChange) => (
+    <div className={styles.stepper}>
+      <button type="button" className={styles.stepBtn} onClick={() => onChange(Math.max(1, (value ?? 1) - 1))}>−</button>
+      <div className={styles.stepVal}>{value ?? '–'}</div>
+      <button type="button" className={styles.stepBtn} onClick={() => onChange(Math.min(99, (value ?? 0) + 1))}>+</button>
+    </div>
+  )
+
+  const t = cardTab ? openFor(cardTab.openedAt, now) : null
 
   return (
     <div className={styles.wrap}>
@@ -93,12 +125,12 @@ export default function Tables({
           <>
             <div className={styles.grid}>
               {drinksTabs.map(tab => {
-                const t = openFor(tab.openedAt, now)
+                const ot = openFor(tab.openedAt, now)
                 return (
-                  <button key={tab.id} type="button" className={`${styles.tile} ${styles.tileOpen} ${t.stale ? styles.tileStale : ''}`} onClick={() => { switchOrder(tab.id); goToTill() }}>
+                  <button key={tab.id} type="button" className={`${styles.tile} ${styles.tileOpen} ${ot.stale ? styles.tileStale : ''}`} onClick={() => onDrinksTab(tab)}>
                     <div className={styles.tileName}>{tab.name}</div>
                     <div className={styles.tileMeta}>{fmt(tabTotal(tab))}</div>
-                    <div className={styles.tileMeta}>{t.text}</div>
+                    <div className={styles.tileMeta}>{ot.text}</div>
                   </button>
                 )
               })}
@@ -118,19 +150,15 @@ export default function Tables({
                 onTap={onTable}
                 renderTile={(table) => {
                   const tab = tabForTable(table)
-                  const t = tab ? openFor(tab.openedAt, now) : null
+                  const ot = tab ? openFor(tab.openedAt, now) : null
+                  // Tiles stay small and readable (round ones especially): just the number and the running total.
+                  // Everything else is in the pop-out when the table is tapped.
                   return {
-                    className: tab ? `${fp.open} ${t.stale ? fp.stale : ''}` : '',
+                    className: tab ? `${fp.open} ${ot.stale ? fp.stale : ''}` : '',
                     node: (
                       <>
                         <div className={fp.name}>{table.name}</div>
-                        {tab ? (
-                          <>
-                            {tab.covers != null && <div className={fp.meta}>{tab.covers} {tab.covers === 1 ? 'cover' : 'covers'}</div>}
-                            <div className={fp.meta}>{fmt(tabTotal(tab))}</div>
-                            <div className={fp.meta}>{t.text}{t.stale ? ' ⚠' : ''}</div>
-                          </>
-                        ) : (table.seats ? <div className={fp.meta}>({table.seats})</div> : null)}
+                        {tab ? <div className={fp.meta}>{fmt(tabTotal(tab))}</div> : null}
                       </>
                     ),
                   }
@@ -146,24 +174,94 @@ export default function Tables({
         )}
       </div>
 
-      {covers && (
-        <div className={styles.overlay} onClick={() => setCovers(null)}>
+      {card && (
+        <div className={styles.overlay} onClick={() => setCard(null)}>
           <div className={styles.sheet} onClick={e => e.stopPropagation()}>
-            <div className={styles.sheetTitle}>{tableLabel(covers.table)}</div>
-            <div className={styles.sheetSub}>How many covers?</div>
-            <div className={styles.stepper}>
-              <button type="button" className={styles.stepBtn} onClick={() => setCovers(c => ({ ...c, count: Math.max(1, c.count - 1) }))}>−</button>
-              <div className={styles.stepVal}>{covers.count}</div>
-              <button type="button" className={styles.stepBtn} onClick={() => setCovers(c => ({ ...c, count: Math.min(99, c.count + 1) }))}>+</button>
+            <div className={styles.sheetTitle}>
+              {card.mode === 'drink' ? (cardTab?.name || 'Tab') : tableLabel(card.table)}
+              {cardTab?.customer ? <span className={styles.titleSub}> · {cardTab.customer}</span> : null}
             </div>
-            <div className={styles.quick}>
-              {[1, 2, 3, 4, 5, 6, 8, 10].map(n => (
-                <button key={n} type="button" className={`${styles.chip} ${covers.count === n ? styles.chipOn : ''}`} onClick={() => setCovers(c => ({ ...c, count: n }))}>{n}</button>
-              ))}
-            </div>
-            <button type="button" className={styles.primary} onClick={() => openTable(true)}>Open table</button>
-            <button type="button" className={styles.skip} onClick={() => openTable(false)}>Skip covers</button>
-            <button type="button" className={styles.cancel} onClick={() => { setCovers(null); showToast?.('Cancelled') }}>Cancel</button>
+
+            {card.mode === 'free' && (
+              <>
+                <div className={styles.sheetSub}>Free{card.table.seats ? ` · seats ${card.table.seats}` : ''}</div>
+                <label className={styles.field}>
+                  <span>Customer name (optional)</span>
+                  <input
+                    className={styles.input}
+                    value={card.customer}
+                    maxLength={40}
+                    placeholder="e.g. Smith party"
+                    onChange={e => setCard(c => ({ ...c, customer: e.target.value }))}
+                  />
+                </label>
+                <div className={styles.fieldLabel}>Covers</div>
+                {stepper(card.covers, n => setCard(c => ({ ...c, covers: n })))}
+                <div className={styles.quick}>
+                  {[1, 2, 3, 4, 5, 6, 8, 10].map(n => (
+                    <button key={n} type="button" className={`${styles.chip} ${card.covers === n ? styles.chipOn : ''}`} onClick={() => setCard(c => ({ ...c, covers: n }))}>{n}</button>
+                  ))}
+                </div>
+                <button type="button" className={styles.primary} onClick={() => openTable(true)}>Open table</button>
+                <button type="button" className={styles.skip} onClick={() => openTable(false)}>Skip covers</button>
+              </>
+            )}
+
+            {(card.mode === 'open' || card.mode === 'drink') && cardTab && (
+              <>
+                <div className={styles.facts}>
+                  <div><span>Total</span><strong>{fmt(tabTotal(cardTab))}</strong></div>
+                  <div><span>Open for</span><strong className={t.stale ? styles.staleText : ''}>{t.text}{t.stale ? ' ⚠' : ''}</strong></div>
+                  <div><span>Items</span><strong>{cardTab.items.reduce((n, i) => n + i.qty, 0)}</strong></div>
+                  {cardTab.staff ? <div><span>Server</span><strong>{cardTab.staff}</strong></div> : null}
+                </div>
+
+                {card.mode === 'drink' ? (
+                  <label className={styles.field}>
+                    <span>Tab name</span>
+                    <input className={styles.input} value={card.name} maxLength={40} onChange={e => setCard(c => ({ ...c, name: e.target.value }))} />
+                  </label>
+                ) : (
+                  <>
+                    <label className={styles.field}>
+                      <span>Customer name</span>
+                      <input
+                        className={styles.input}
+                        value={card.customer}
+                        maxLength={40}
+                        placeholder="e.g. Smith party"
+                        onChange={e => setCard(c => ({ ...c, customer: e.target.value }))}
+                      />
+                    </label>
+                    <div className={styles.fieldLabel}>
+                      Covers {card.covers == null ? '(not set)' : ''}
+                      {card.covers != null && (
+                        <button type="button" className={styles.linkBtn} onClick={() => setCard(c => ({ ...c, covers: null }))}>clear</button>
+                      )}
+                    </div>
+                    {stepper(card.covers, n => setCard(c => ({ ...c, covers: n })))}
+                  </>
+                )}
+
+                <div className={styles.fieldLabel}>Order so far</div>
+                <div className={styles.items}>
+                  {cardTab.items.length
+                    ? cardTab.items.map((i, idx) => (
+                      // eslint-disable-next-line react/no-array-index-key
+                      <div key={idx} className={styles.itemRow}>
+                        <span>{saleLineText(i)}</span>
+                        <span>{fmt(i.price * i.qty)}</span>
+                      </div>
+                    ))
+                    : <div className={styles.empty}>Nothing ordered yet.</div>}
+                </div>
+
+                <button type="button" className={styles.primary} onClick={goToOrder}>Open order</button>
+                <button type="button" className={styles.skip} onClick={() => { saveCard(); showToast?.('Saved'); setCard(null) }}>Save changes</button>
+              </>
+            )}
+
+            <button type="button" className={styles.cancel} onClick={() => setCard(null)}>Close</button>
           </div>
         </div>
       )}

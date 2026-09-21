@@ -25,3 +25,19 @@
 .primary { padding: 14px; border: none; border-radius: 12px; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
 .skip { padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--white); font-size: 15px; }
 .cancel { padding: 8px; border: none; background: none; color: var(--muted); font-size: 14px; }
+
+/* Pop-out card */
+.sheet { max-height: 92vh; overflow-y: auto; }
+.titleSub { font-size: 16px; font-weight: 500; color: var(--muted); }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.fieldLabel { font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.input { padding: 12px; font-size: 16px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.facts div { background: var(--bg); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
+.facts span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.facts strong { font-size: 17px; color: var(--navy); }
+.staleText { color: var(--red) !important; }
+.items { max-height: 170px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px 10px; }
+.itemRow { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.itemRow:last-child { border-bottom: none; }
+.linkBtn { border: none; background: none; color: var(--accent-dark); font-size: 13px; text-decoration: underline; }

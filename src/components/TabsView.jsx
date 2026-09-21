@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, tabTotal, saleLineText } from '../utils'
+import { fmt, tabTotal, saleLineText, tabLabel } from '../utils'
 import styles from './TabsView.module.css'
 
 export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, switchOrder, showToast, updateTabLimit }) {
@@ -87,7 +87,7 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
             return (
               <div key={tab.id} className={styles.card}>
                 <div className={styles.cardHead}>
-                  <span className={styles.cardName}>{tab.name}</span>
+                  <span className={styles.cardName}>{tabLabel(tab)}</span>
                   <span
                     className={`${styles.cardTotal} ${
                       total >= limitVal ? styles.cardTotalAtLimit

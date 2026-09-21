@@ -128,6 +128,9 @@ export function stationTickets(items, base, { kitchenOnly = false } = {}) {
   ].filter(Boolean)
 }
 
+/** What staff and tickets call a tab: "Table 6 · Smith" when it has a customer name, else just "Table 6". */
+export const tabLabel = (tab) => (tab?.customer ? `${tab.name} · ${tab.customer}` : String(tab?.name ?? ''))
+
 export const tabTotal = tab =>
   tab.items.reduce((s, i) => s + i.price * i.qty, 0)
 
