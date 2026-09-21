@@ -236,3 +236,10 @@ on conflict (id) do nothing;
 alter table public.bar_orders add column if not exists station text not null default 'bar';
 alter table public.bar_orders add column if not exists covers integer;
 create index if not exists bar_orders_station_idx on public.bar_orders (station, session_date, archived);
+
+-- Floor plan layout (added 2026-09-21): position/size in a 100 x 75 unit canvas, and shape.
+alter table public.floor_tables add column if not exists x numeric;
+alter table public.floor_tables add column if not exists y numeric;
+alter table public.floor_tables add column if not exists w numeric;
+alter table public.floor_tables add column if not exists h numeric;
+alter table public.floor_tables add column if not exists shape text;

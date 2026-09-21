@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CATEGORIES, STOCK_CATEGORIES } from '../data'
 import { fmt } from '../utils'
 import { features } from '../features'
+import FloorPlanEditor from './FloorPlanEditor'
 import { POS_FOOD_CATEGORIES } from '../data'
 import styles from './Settings.module.css'
 
@@ -296,6 +297,7 @@ export default function Settings({
     deleteStockDefinition(item.id)
   }
 
+  const [planAreaId, setPlanAreaId] = useState(null)
   const [groupForm, setGroupForm] = useState(null) // { id?, name, required, choicesText }
 
   const EXAMPLE_GROUPS = [
@@ -415,7 +417,13 @@ export default function Settings({
                     <button type="button" className={styles.dangerBtn} onClick={() => {
                       if (window.confirm(`Delete ${area.name} and its ${mine.length} tables?`)) deleteFloorArea(area.id)
                     }}>Delete area</button>
+                    <button type="button" className={styles.secondaryBtn} onClick={() => setPlanAreaId(planAreaId === area.id ? null : area.id)}>
+                      {planAreaId === area.id ? 'Close floor plan' : 'Edit floor plan'}
+                    </button>
                   </div>
+                  {planAreaId === area.id && (
+                    <FloorPlanEditor tables={mine} saveFloorTable={saveFloorTable} showToast={showToast} />
+                  )}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
                     {mine.map(t => (
                       <span key={t.id} style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', background: 'var(--white)' }}>

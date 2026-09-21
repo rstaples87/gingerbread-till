@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fmt, tabTotal } from '../utils'
+import FloorPlan from './FloorPlan'
+import fp from './FloorPlan.module.css'
 import styles from './Tables.module.css'
 
 const STALE_HOURS = 12
@@ -107,29 +109,32 @@ export default function Tables({
           </>
         ) : (
           <>
-            <div className={styles.grid}>
-              {tablesHere.map(table => {
-                const tab = tabForTable(table)
-                const t = tab ? openFor(tab.openedAt, now) : null
-                return (
-                  <button
-                    key={table.id}
-                    type="button"
-                    className={`${styles.tile} ${tab ? styles.tileOpen : ''} ${t?.stale ? styles.tileStale : ''}`}
-                    onClick={() => onTable(table)}
-                  >
-                    <div className={styles.tileName}>{table.name}{table.seats ? <span className={styles.seats}> ({table.seats})</span> : null}</div>
-                    {tab ? (
+            {tablesHere.length > 0 && (
+              <FloorPlan
+                tables={tablesHere}
+                mode="view"
+                onTap={onTable}
+                renderTile={(table) => {
+                  const tab = tabForTable(table)
+                  const t = tab ? openFor(tab.openedAt, now) : null
+                  return {
+                    className: tab ? `${fp.open} ${t.stale ? fp.stale : ''}` : '',
+                    node: (
                       <>
-                        {tab.covers != null && <div className={styles.tileMeta}>{tab.covers} {tab.covers === 1 ? 'cover' : 'covers'}</div>}
-                        <div className={styles.tileMeta}>{fmt(tabTotal(tab))}</div>
-                        <div className={styles.tileMeta}>{t.text}{t.stale ? ' ⚠' : ''}</div>
+                        <div className={fp.name}>{table.name}</div>
+                        {tab ? (
+                          <>
+                            {tab.covers != null && <div className={fp.meta}>{tab.covers} {tab.covers === 1 ? 'cover' : 'covers'}</div>}
+                            <div className={fp.meta}>{fmt(tabTotal(tab))}</div>
+                            <div className={fp.meta}>{t.text}{t.stale ? ' ⚠' : ''}</div>
+                          </>
+                        ) : (table.seats ? <div className={fp.meta}>({table.seats})</div> : null)}
                       </>
-                    ) : null}
-                  </button>
-                )
-              })}
-            </div>
+                    ),
+                  }
+                }}
+              />
+            )}
             {!tablesHere.length && (
               <div className={styles.empty}>
                 No tables in this area yet. Add them in Settings → Tables.

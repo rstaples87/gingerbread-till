@@ -1514,9 +1514,14 @@ export default function App() {
     if (clash) { showToast('That table already exists in this area'); return null }
     const existing = table.id ? floorTables.find(t => t.id === table.id) : null
     const sort = existing?.sort ?? (Math.max(0, ...floorTables.filter(t => t.areaId === table.areaId).map(t => t.sort ?? 0)) + 1)
-    const row = { id: existing?.id || newFloorId('t_'), areaId: table.areaId, name, seats: Number.isFinite(seatsNum) ? seatsNum : null, sort }
+    // Floor-plan position/shape: use what was passed, else keep what the table already has.
+    const pick = (k) => (table[k] !== undefined ? table[k] : (existing?.[k] ?? null))
+    const row = {
+      id: existing?.id || newFloorId('t_'), areaId: table.areaId, name, seats: Number.isFinite(seatsNum) ? seatsNum : null, sort,
+      x: pick('x'), y: pick('y'), w: pick('w'), h: pick('h'), shape: pick('shape'),
+    }
     setFloorTables(prev => (existing ? prev.map(t => (t.id === row.id ? row : t)) : [...prev, row]))
-    sendMenuOp('floor_table', { id: row.id, area_id: row.areaId, name: row.name, seats: row.seats, sort: row.sort })
+    sendMenuOp('floor_table', { id: row.id, area_id: row.areaId, name: row.name, seats: row.seats, sort: row.sort, x: row.x, y: row.y, w: row.w, h: row.h, shape: row.shape })
     return row
   }, [floorTables, setFloorTables, showToast])
 

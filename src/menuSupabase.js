@@ -141,7 +141,12 @@ export async function fetchMenuFromSupabase() {
       : null
     const floorAreas = fa.data ? fa.data.map(r => ({ id: r.id, name: r.name, sort: r.sort ?? 0 })) : null
     const floorTables = ft.data
-      ? ft.data.map(r => ({ id: r.id, areaId: r.area_id, name: r.name, seats: r.seats ?? null, sort: r.sort ?? 0 }))
+      ? ft.data.map(r => ({
+        id: r.id, areaId: r.area_id, name: r.name, seats: r.seats ?? null, sort: r.sort ?? 0,
+        x: r.x != null ? Number(r.x) : null, y: r.y != null ? Number(r.y) : null,
+        w: r.w != null ? Number(r.w) : null, h: r.h != null ? Number(r.h) : null,
+        shape: r.shape ?? null,
+      }))
       : null
     return { products, variants, stockDefinitions, categories, optionGroups, floorAreas, floorTables }
   } catch (err) {

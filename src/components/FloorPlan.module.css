@@ -1,0 +1,37 @@
+.scroller { width: 100%; overflow-x: auto; }
+.canvas {
+  position: relative;
+  width: 100%;
+  min-width: 640px;
+  aspect-ratio: 4 / 3;
+  container-type: inline-size;
+  background-color: #eaf2f7;
+  background-image: linear-gradient(rgba(136, 196, 221, 0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(136, 196, 221, 0.25) 1px, transparent 1px);
+  background-size: 10% 13.333%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.canvasEdit { outline: 2px dashed var(--accent-dark); outline-offset: -2px; }
+.tile {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid var(--accent-dark);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--text);
+  line-height: 1.15;
+  overflow: hidden;
+}
+.round { border-radius: 50%; }
+.editTile { touch-action: none; cursor: grab; }
+.selected { box-shadow: 0 0 0 3px var(--navy); z-index: 2; }
+.name { font-size: 2.4cqw; font-weight: 700; }
+.meta { font-size: 1.5cqw; }
+.open { background: var(--accent); }
+.stale { border-color: var(--red); box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.3); }
