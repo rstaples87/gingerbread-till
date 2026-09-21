@@ -28,7 +28,7 @@ export default function Stock({ products, stock, adjustTillStock, adjustStockIte
           </button>
         </div>
 
-        {tab === 'till' && products.map(p => {
+        {tab === 'till' && products.filter(p => p.group !== 'food').map(p => {
           const s = stock[p.id] ?? 0
           const portions = p.bottleYield ? Math.floor(s * p.bottleYield) : s
           const isOut = p.bottleYield ? portions < 1 : s === 0

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import styles from './Header.module.css'
+import { branding } from '../features'
 
 export default function Header({ currentStaff, onStaffClick }) {
   const [time, setTime] = useState('')
@@ -23,8 +24,8 @@ export default function Header({ currentStaff, onStaffClick }) {
         />
         <div className={styles.brandStack}>
           <div className={styles.brandGinger}>Gingerbread</div>
-          <div className={styles.brandTill}>Till</div>
-          <div className={styles.brandEvent}>EVENT MANAGEMENT</div>
+          <div className={styles.brandTill}>{branding.productName}</div>
+          <div className={styles.brandEvent}>{branding.tagline}</div>
         </div>
       </div>
       <div className={styles.right}>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import styles from './StaffOverlay.module.css'
+import { branding } from '../features'
 
 export function PinDots({ pinLength }) {
   return (
@@ -107,8 +108,8 @@ export default function StaffOverlay({ onSelect, onClose, verifyManagerPin }) {
             />
             <div className={styles.heroText}>
               <div className={styles.heroGinger}>Gingerbread</div>
-              <div className={styles.heroTill}>Till</div>
-              <div className={styles.heroEvent}>EVENT MANAGEMENT</div>
+              <div className={styles.heroTill}>{branding.productName}</div>
+              <div className={styles.heroEvent}>{branding.tagline}</div>
             </div>
           </div>
           <div className={`${styles.card} ${styles.signInCard}`} role="dialog" aria-modal="true">

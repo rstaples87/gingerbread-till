@@ -208,7 +208,7 @@ export default function Reports({ stockDefinitions = [], stockItems = {}, produc
               ))}
             </tbody>
           </table>
-          <div className={styles.foot}>Till products (counted in the till): {products.filter(p => Number(stock[p.id]) > 0).length} of {products.length} in stock.</div>
+          <div className={styles.foot}>Till products (counted in the till): {products.filter(p => p.group !== 'food' && Number(stock[p.id]) > 0).length} of {products.filter(p => p.group !== 'food').length} in stock.</div>
         </div>
       </div>
     </div>
