@@ -5,7 +5,9 @@ export default function Nav({ view, setView, openTabsCount }) {
   const tabs = [
     { key: 'till', label: 'Till' },
     ...(features.tables ? [{ key: 'tables', label: 'Tables' }] : []),
-    { key: 'bar', label: 'Bar Display System' },
+    ...(features.stations
+      ? [{ key: 'kitchen', label: 'Kitchen Display' }, { key: 'bar', label: 'Bar Display' }]
+      : [{ key: 'bar', label: 'Bar Display System' }]),
     { key: 'tabs', label: openTabsCount > 0 ? `Tabs (${openTabsCount})` : 'Tabs' },
     { key: 'stock', label: 'Stock' },
     { key: 'staff', label: 'Staff' },

@@ -231,3 +231,8 @@ select 't_' || n, 'area_hop', n::text, null, n from generate_series(15, 39) as n
 insert into public.floor_tables (id, area_id, name, seats, sort) values
   ('t_milling_1', 'area_milling', 'Milling Room 1', 12, 1), ('t_milling_2', 'area_milling', 'Milling Room 2', 6, 2)
 on conflict (id) do nothing;
+
+-- Kitchen / bar display stations (added 2026-09-21): food tickets go to 'kitchen', drinks to 'bar'.
+alter table public.bar_orders add column if not exists station text not null default 'bar';
+alter table public.bar_orders add column if not exists covers integer;
+create index if not exists bar_orders_station_idx on public.bar_orders (station, session_date, archived);

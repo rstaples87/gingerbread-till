@@ -181,3 +181,12 @@
     padding: 16px 18px 24px;
   }
 }
+
+/* Kitchen / bar station screens */
+.covers { font-weight: 500; opacity: 0.8; }
+.age { font-weight: 600; }
+.ageWarn { color: #b45309; }
+.ageLate { color: var(--red); }
+.itemOpts { font-size: 0.9em; opacity: 0.85; margin-left: 1.4em; }
+.itemNote { font-size: 0.95em; font-weight: 700; color: var(--red); margin-left: 1.4em; }
+.soundBtn { margin-left: 12px; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--white); font-size: 12px; }

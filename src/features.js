@@ -24,4 +24,6 @@ export const features = {
   foodOptions: isPosMode,
   // Table plan (areas, numbered tables, covers). POS only.
   tables: isPosMode,
+  // Kitchen display + bar display: one send from the till splits food (kitchen) and drinks (bar). POS only.
+  stations: isPosMode,
 }

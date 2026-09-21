@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText } from '../utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets } from '../utils'
 import { features } from '../features'
 import { supabase } from '../supabase'
 import { logSupabaseWrite } from '../supabaseWriteLog'
@@ -372,6 +372,11 @@ export default function Till({
         : {}),
       ...(noteTrim ? { notes: noteTrim } : {}),
     }
+    if (features.stations) {
+      // Food in a quick sale (e.g. takeaway) still needs cooking; drinks are served straight away.
+      const kitchen = buildStationPayloads({ tabName: 'Quick sale', notes: noteTrim || null, kitchenOnly: true })
+      if (kitchen.length) sendToStations(kitchen)
+    }
     processCharge(confPayment, extras)
     setTabOrderNotes('')
     setChargeModal(false)
@@ -473,6 +478,17 @@ export default function Till({
       const mixerLine = mixerId ? mixerChoiceLabel(stockItemById[mixerId]?.name) : null
       let name = orderLineLabel(line, p.name)
       if (mixerLine) name = `${name} (${mixerLine})`
+      if (features.stations) {
+        // Kitchen/bar tickets show choices and notes on their own lines.
+        const opts = (typeof line === 'object' ? line?.options || [] : []).map(o => o.choice).join(', ')
+        const lineNote = typeof line === 'object' ? line?.note : ''
+        lines.push({
+          name, qty, price: Number(p.price), group: p.group === 'food' ? 'food' : 'drink',
+          ...(opts ? { options: opts } : {}),
+          ...(lineNote ? { note: lineNote } : {}),
+        })
+        continue
+      }
       const detail = lineDetailText(line)
       if (detail) name = `${name} (${detail})`
       lines.push({ name, qty, price: Number(p.price) })
@@ -537,6 +553,15 @@ export default function Till({
 
   const handleAddItemsClick = () => {
     if (!hasItems || wouldExceedTabLimit || !isTab || !activeTab) return
+    if (features.stations) {
+      const payloads = buildStationPayloads({ tabName: activeTab.name, covers: activeTab.covers, notes: tabOrderNotes.trim() })
+      const committed = commitItemsToTab(activeOrderKey)
+      if (committed) {
+        setTabOrderNotes('')
+        if (payloads.length) sendToStations(payloads)
+      }
+      return
+    }
     const payload = buildBarOrderPayloadFromPanel()
     if (!payload) return
     const ok = commitItemsToTab(activeOrderKey)
@@ -556,6 +581,15 @@ export default function Till({
 
   const handleSendToBar = async () => {
     if (!isTab || !activeTab || !hasItems) return
+    if (features.stations) {
+      const payloads = buildStationPayloads({ tabName: activeTab.name, covers: activeTab.covers, notes: tabOrderNotes.trim() })
+      if (!payloads.length) return
+      if (await sendToStations(payloads)) {
+        setTabOrderNotes('')
+        setPostSendBdsPrompt(true)
+      }
+      return
+    }
     const payload = buildBarOrderPayloadFromPanel()
     if (!payload) return
     const ok = await insertBarOrderPayload(payload)
@@ -563,6 +597,34 @@ export default function Till({
     setTabOrderNotes('')
     bdsToast(ok)
     setPostSendBdsPrompt(true)
+  }
+
+  /** POS: one ticket per station that has items — food to the kitchen screen, drinks to the bar screen. */
+  const buildStationPayloads = ({ tabName, covers, notes, kitchenOnly = false }) => {
+    const items = buildBarOrderItemsFromPanel()
+    if (!items.length) return []
+    return stationTickets(items, {
+      tab_name: tabName,
+      staff_name: currentStaff || 'Unknown',
+      status: 'pending',
+      session_date: localSessionDateString(),
+      notes: notes || null,
+      ...(covers != null ? { covers } : {}),
+    }, { kitchenOnly })
+  }
+
+  const sendToStations = async (payloads) => {
+    let anyQueued = false
+    let ok = true
+    for (const p of payloads) {
+      const r = await insertBarOrderPayload(p)
+      if (!r) ok = false
+      if (r === 'queued') anyQueued = true
+    }
+    if (!ok) return false
+    const where = payloads.map(p => (p.station === 'kitchen' ? 'kitchen' : 'bar')).join(' and ')
+    showToast(anyQueued ? `Offline — will reach the ${where} screen when back online` : `Sent to ${where}`)
+    return true
   }
 
   const confirmPostSendAddToTab = () => {
@@ -803,7 +865,7 @@ export default function Till({
                     disabled={!hasItems}
                     onClick={handleSendToBar}
                   >
-                    Send to BDS
+                    {features.stations ? 'Send to kitchen / bar' : 'Send to BDS'}
                   </button>
                 </div>
                 {hasItems && wouldExceedTabLimit && (

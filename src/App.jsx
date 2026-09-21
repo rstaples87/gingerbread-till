@@ -1745,7 +1745,8 @@ export default function App() {
         openTabsCount={hydratedTabs.length}
       />
       {view === 'till'  && <Till  {...sharedProps} />}
-      {view === 'bar'  && <BarView showToast={showToast} />}
+      {features.stations && view === 'kitchen' && <BarView showToast={showToast} station="kitchen" />}
+      {view === 'bar'  && <BarView showToast={showToast} station={features.stations ? 'bar' : null} />}
       {view === 'tabs'  && <TabsView {...sharedProps} />}
       {view === 'stock' && <Stock  {...sharedProps} />}
       {view === 'staff' && <StaffLog {...sharedProps} />}

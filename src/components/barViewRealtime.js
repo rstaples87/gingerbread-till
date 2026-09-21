@@ -5,8 +5,9 @@ function sessionDateKey(row) {
   return String(d)
 }
 
-function barOrderRowInView(row, sessionDate) {
+function barOrderRowInView(row, sessionDate, station) {
   if (!row?.id) return false
+  if (station && (row.station || 'bar') !== station) return false
   if (sessionDateKey(row) !== sessionDate) return false
   if (row.archived === true) return false
   return true
@@ -26,13 +27,13 @@ function sortBySentAtDesc(list) {
 /**
  * Merge a Supabase Realtime postgres_changes payload into bar_orders list for today’s view.
  */
-export function mergeBarOrdersRealtime(prev, payload, sessionDate) {
+export function mergeBarOrdersRealtime(prev, payload, sessionDate, station = null) {
   const eventType = payload.eventType || payload.event
   const newRow = payload.new
   const oldRow = payload.old
 
   if (eventType === 'INSERT') {
-    if (!newRow || !barOrderRowInView(newRow, sessionDate)) return prev
+    if (!newRow || !barOrderRowInView(newRow, sessionDate, station)) return prev
     if (prev.some((r) => r.id === newRow.id)) {
       return prev.map((r) => (r.id === newRow.id ? newRow : r))
     }
@@ -42,7 +43,7 @@ export function mergeBarOrdersRealtime(prev, payload, sessionDate) {
   if (eventType === 'UPDATE') {
     const id = newRow?.id ?? oldRow?.id
     if (!id) return prev
-    if (!newRow || !barOrderRowInView(newRow, sessionDate)) {
+    if (!newRow || !barOrderRowInView(newRow, sessionDate, station)) {
       return prev.filter((r) => r.id !== id)
     }
     const idx = prev.findIndex((r) => r.id === id)

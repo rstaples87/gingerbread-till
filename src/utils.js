@@ -110,6 +110,24 @@ export const orderToItems = (order, products) =>
     }
   }).filter(Boolean)
 
+/**
+ * Split order lines into display tickets: food lines -> 'kitchen', everything else -> 'bar'.
+ * items: [{ name, qty, price, group, options?, note? }]; base: fields shared by every ticket.
+ * kitchenOnly drops the bar ticket (e.g. drinks in a quick sale are served straight away).
+ */
+export function stationTickets(items, base, { kitchenOnly = false } = {}) {
+  const make = (station, list) => (list.length ? {
+    ...base,
+    items: list.map(({ group: _group, ...rest }) => rest),
+    total: Math.round(list.reduce((sum, i) => sum + i.price * i.qty, 0) * 100) / 100,
+    station,
+  } : null)
+  return [
+    make('kitchen', items.filter(i => i.group === 'food')),
+    kitchenOnly ? null : make('bar', items.filter(i => i.group !== 'food')),
+  ].filter(Boolean)
+}
+
 export const tabTotal = tab =>
   tab.items.reduce((s, i) => s + i.price * i.qty, 0)
 
