@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" fill="#1f3a5f"/>
+  <!-- fork -->
+  <g fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M186 150v70c0 20 12 34 30 36v106"/>
+    <path d="M246 150v70c0 20-12 34-30 36"/>
+    <path d="M216 150v100"/>
+  </g>
+  <!-- knife -->
+  <path d="M320 150c30 10 46 48 46 92 0 14-4 24-16 26v106" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M320 150v118" fill="none" stroke="white" stroke-width="14" stroke-linecap="round"/>
+  <!-- till drawer strip -->
+  <rect x="166" y="392" width="196" height="16" rx="8" fill="#88c4dd"/>
+</svg>

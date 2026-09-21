@@ -23,7 +23,7 @@ const IS_POS = process.env.VITE_APP_MODE === 'pos'
 const posBranding = {
   name: 'pos-branding',
   transformIndexHtml(html) {
-    return IS_POS ? html.replace('<title>Gingerbread Till</title>', '<title>Gingerbread POS</title>') : html
+    return IS_POS ? html.replace('<title>Gingerbread Till</title>', '<title>Gingerbread POS</title>').replace('href="/logo.svg"', 'href="/logo-pos.svg"') : html
   },
   closeBundle() {
     if (!IS_POS) return
@@ -32,6 +32,9 @@ const posBranding = {
     const manifest = JSON.parse(fs.readFileSync(file, 'utf8'))
     manifest.name = 'Gingerbread POS'
     manifest.short_name = 'POS'
+    manifest.theme_color = '#1f3a5f'
+    manifest.background_color = '#1f3a5f'
+    manifest.icons = manifest.icons.map(i => ({ ...i, src: '/logo-pos.svg' }))
     fs.writeFileSync(file, JSON.stringify(manifest, null, 2))
   },
 }
