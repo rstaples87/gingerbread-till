@@ -155,6 +155,6 @@ export const CATEGORIES = ['Wine', 'Beer', 'Cider', 'Spirits', 'Shots', 'Soft Dr
 
 /** Starting till categories for the Haywain POS build (editable in Settings). Food ones default new products to 'food'. */
 export const POS_FOOD_CATEGORIES = ['Starters', 'Mains', 'Sides', 'Desserts']
-export const POS_TILL_CATEGORIES = [...POS_FOOD_CATEGORIES, 'Wine', 'Beer', 'Cider', 'Spirits', 'Soft Drinks']
+export const POS_TILL_CATEGORIES = [...POS_FOOD_CATEGORIES, 'Wine', 'Beer', 'Cider', 'Spirits', 'Soft Drinks', 'Low & Free']
 
 export const STOCK_CATEGORIES = ['Lager', 'Ale', '0% Beer', 'Cider', 'House Spirits', 'Premium Spirits', 'Other Spirits', 'Wine', 'Soft Drinks', 'Mixers']
