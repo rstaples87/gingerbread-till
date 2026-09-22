@@ -29,6 +29,8 @@ export default function Till({
     const list = tillCategories?.length ? [...tillCategories] : [...CATEGORIES]
     return new Set(list)
   })
+  // Sub-category picked within a category's product grid (e.g. Spirits -> Gin), keyed by category. Null/absent = show all.
+  const [activeSubcat, setActiveSubcat] = useState({})
   const [numpad, setNumpad] = useState(null) // { productId, value }
   const [chargeModal, setChargeModal] = useState(false)
   const [chargeTip, setChargeTip] = useState(0)
@@ -159,6 +161,22 @@ export default function Till({
       if (n.has(cat)) n.delete(cat)
       else n.add(cat)
       return n
+    })
+  }
+
+  // Sub-categories present within a category, in a sensible fixed order, falling back to first-seen order for anything unlisted.
+  const SUBCAT_ORDER = ['Gin', 'Vodka', 'Whiskey', 'Rum', 'Liqueurs', 'Other Spirits', 'Ale', 'Lager', 'Stout', 'White', 'Rose', 'Red', 'Sparkling', 'Other']
+  const subcatsFor = (cat) => {
+    const seen = []
+    for (const p of products) {
+      if (p.category === cat && p.subcategory && !seen.includes(p.subcategory)) seen.push(p.subcategory)
+    }
+    return seen.sort((a, b) => {
+      const ia = SUBCAT_ORDER.indexOf(a), ib = SUBCAT_ORDER.indexOf(b)
+      if (ia === -1 && ib === -1) return 0
+      if (ia === -1) return 1
+      if (ib === -1) return -1
+      return ia - ib
     })
   }
 
@@ -729,10 +747,34 @@ export default function Till({
 
       {/* Products */}
       <div className={`${styles.productsScroll} ${tabLimitReached ? styles.productsScrollBlocked : ''}`}>
-        {visibleCats.map(cat => (
+        {visibleCats.map(cat => {
+          const subcats = subcatsFor(cat)
+          const activeSub = activeSubcat[cat]
+          return (
           <div key={cat} className={styles.catSection}>
+            {subcats.length > 1 && (
+              <div className={`${styles.catToggles} hide-scroll`}>
+                <button
+                  type="button"
+                  className={`${styles.catToggle} ${!activeSub ? styles.catOn : styles.catOff}`}
+                  onClick={() => setActiveSubcat(prev => ({ ...prev, [cat]: null }))}
+                >
+                  All
+                </button>
+                {subcats.map(sub => (
+                  <button
+                    key={sub}
+                    type="button"
+                    className={`${styles.catToggle} ${activeSub === sub ? styles.catOn : styles.catOff}`}
+                    onClick={() => setActiveSubcat(prev => ({ ...prev, [cat]: prev[cat] === sub ? null : sub }))}
+                  >
+                    {sub}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className={styles.grid}>
-              {products.filter(p => p.category === cat).map(p => {
+              {products.filter(p => p.category === cat && (!activeSub || p.subcategory === activeSub)).map(p => {
                 const variantStatus = getVariantStatus(p)
                 const s = stock[p.id] ?? 0
                 const portionsAvailable = p.bottleYield ? Math.floor(s * p.bottleYield) : s
@@ -766,7 +808,8 @@ export default function Till({
               })}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Low stock banner */}
