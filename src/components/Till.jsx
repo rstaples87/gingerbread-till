@@ -728,22 +728,27 @@ export default function Till({
         </div>
       )}
 
-      {/* Category toggles — food and drink on separate lines so it doesn't get crowded */}
+      {/* Category toggles — food and drink on clearly separate, labelled lines so it doesn't get crowded */}
       {foodCats.length > 0 && (
-        <div className={`${styles.catToggles} hide-scroll`}>
-          {foodCats.map(cat => (
-            <button
-              key={cat}
-              type="button"
-              className={`${styles.catToggle} ${hiddenCats.has(cat) ? styles.catOff : styles.catOn}`}
-              onClick={() => toggleCat(cat)}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className={styles.catRow}>
+          <div className={styles.catRowLabel}>Food</div>
+          <div className={`${styles.catToggles} hide-scroll`}>
+            {foodCats.map(cat => (
+              <button
+                key={cat}
+                type="button"
+                className={`${styles.catToggle} ${hiddenCats.has(cat) ? styles.catOff : styles.catOn}`}
+                onClick={() => toggleCat(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
       )}
-      <div className={`${styles.catToggles} hide-scroll`}>
+      <div className={styles.catRow}>
+        <div className={styles.catRowLabel}>Drinks</div>
+        <div className={`${styles.catToggles} hide-scroll`}>
         {drinkCats.map(cat => (
           <button
             key={cat}
@@ -754,13 +759,14 @@ export default function Till({
             {cat}
           </button>
         ))}
-        <button
-          type="button"
-          className={styles.openAllBtn}
-          onClick={openOrCloseAllChips}
-        >
-          {allChipsOpen ? 'Close all' : 'Open all'}
-        </button>
+          <button
+            type="button"
+            className={styles.openAllBtn}
+            onClick={openOrCloseAllChips}
+          >
+            {allChipsOpen ? 'Close all' : 'Open all'}
+          </button>
+        </div>
       </div>
 
       {/* Products */}

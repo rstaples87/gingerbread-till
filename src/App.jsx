@@ -14,6 +14,7 @@ import {
 import { supabase, isSupabaseConfigured } from './supabase'
 import { useVenueAuth, signOutVenue } from './auth'
 import VenueSignIn from './components/VenueSignIn'
+import UpdateBanner from './components/UpdateBanner'
 import ManagerGate from './components/ManagerGate'
 import Reports from './components/Reports'
 import Tables from './components/Tables'
@@ -36,7 +37,6 @@ import Till from './components/Till'
 import TabsView from './components/TabsView'
 import Stock from './components/Stock'
 import StaffLog from './components/StaffLog'
-import UpdateBanner from './components/UpdateBanner'
 import Sales from './components/Sales'
 import Settings from './components/Settings'
 import BarView from './components/BarView'
@@ -1001,6 +1001,24 @@ export default function App() {
     setTimeout(() => setToast(t => ({ ...t, visible: false })), 2400)
   }, [])
 
+  // A plain SPA keeps running whatever code it loaded with, even after a newer build is deployed.
+  // Check /version.json now and then, and on a reload prompt if it no longer matches this tab's build.
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    const check = () => {
+      fetch('/version.json', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(v => { if (!cancelled && v?.id && v.id !== __BUILD_ID__) setUpdateAvailable(true) })
+        .catch(() => {})
+    }
+    check()
+    const onFocus = () => check()
+    window.addEventListener('focus', onFocus)
+    const id = setInterval(check, 5 * 60 * 1000)
+    return () => { cancelled = true; window.removeEventListener('focus', onFocus); clearInterval(id) }
+  }, [])
+
   useEffect(() => {
     const onOffline = () => showToast('Offline — sales saving locally')
     window.addEventListener('offline', onOffline)
@@ -1960,6 +1978,7 @@ export default function App() {
 
   return (
     <>
+      {updateAvailable && <UpdateBanner />}
       <Header
         currentStaff={currentStaff}
         onStaffClick={() => setStaffOverlayOpen(true)}
@@ -2037,7 +2056,6 @@ export default function App() {
         />
       )}
       <Toast msg={toast.msg} visible={toast.visible} />
-      <UpdateBanner />
     </>
   )
 }

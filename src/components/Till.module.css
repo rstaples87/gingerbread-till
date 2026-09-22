@@ -93,15 +93,36 @@
 .addTabBtn:hover { border-color: var(--navy); color: var(--navy); }
 
 /* Category toggles */
-.catToggles {
+.catRow {
+  display: flex;
+  align-items: center;
   background: var(--white);
   border-bottom: 1px solid var(--border);
-  padding: 7px 10px;
+  flex-shrink: 0;
+}
+.catRow + .catRow {
+  border-top: 6px solid var(--bg);
+}
+.catRowLabel {
+  flex-shrink: 0;
+  width: 44px;
+  padding-left: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.catToggles {
+  background: var(--white);
+  padding: 7px 10px 7px 0;
   display: flex;
   gap: 6px;
   align-items: center;
   overflow-x: auto;
   flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 .catToggle {
   padding: 4px 12px;
