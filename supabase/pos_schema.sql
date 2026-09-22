@@ -275,3 +275,11 @@ alter table public.tabs add column if not exists customer text;
 
 -- Tip on a payment (added 2026-09-21). Not part of the bill.
 alter table public.transactions add column if not exists tip numeric;
+
+-- Drinks loaded from the Haywain team's price sheet (2026-09-23): 127 products
+-- (spirits single+double, draught pints, bottled beer/cider, alcohol-free, soft drinks/mixers/juice/water).
+-- Loaded directly into menu_products on the POS project; see 16 Gingerbread POS/MEMORY.md for the item list and assumptions.
+
+-- Drinks loaded from the Haywain team's price sheet (2026-09-23): 127 products
+-- (spirits single+double, draught pints, bottled beer/cider, alcohol-free, soft drinks/mixers/juice/water).
+-- Loaded directly into menu_products on the POS project; see 16 Gingerbread POS/MEMORY.md for the item list and assumptions.
