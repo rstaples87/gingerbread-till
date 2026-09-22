@@ -93,6 +93,11 @@
 .addTabBtn:hover { border-color: var(--navy); color: var(--navy); }
 
 /* Category toggles */
+.catToggleGroup {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
 .catRow {
   display: flex;
   align-items: center;
@@ -689,9 +694,13 @@
     grid-area: limit;
   }
 
-  .catToggles {
+  .catToggleGroup {
     grid-area: cats;
     border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .productsScroll {

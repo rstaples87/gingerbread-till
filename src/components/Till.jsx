@@ -728,7 +728,11 @@ export default function Till({
         </div>
       )}
 
-      {/* Category toggles — food and drink on clearly separate, labelled lines so it doesn't get crowded */}
+      {/* Category toggles — food and drink on clearly separate, labelled lines so it doesn't get crowded.
+          Both rows sit inside one wrapper so the desktop grid layout (grid-area: cats) still targets a
+          single element — putting the grid-area on a per-row element broke the desktop layout, since
+          grid-template-areas only place *direct* children of the grid container. */}
+      <div className={styles.catToggleGroup}>
       {foodCats.length > 0 && (
         <div className={styles.catRow}>
           <div className={styles.catRowLabel}>Food</div>
@@ -767,6 +771,7 @@ export default function Till({
             {allChipsOpen ? 'Close all' : 'Open all'}
           </button>
         </div>
+      </div>
       </div>
 
       {/* Products */}
