@@ -31,6 +31,8 @@ export default function Till({
   })
   // Sub-category picked within a category's product grid (e.g. Spirits -> Gin), keyed by category. Null/absent = show all.
   const [activeSubcat, setActiveSubcat] = useState({})
+  // A tile that groups several sizes of the same drink (e.g. a wine's 175ml/125ml/carafe/Bottle) — tapping it opens this size picker.
+  const [sizeSheet, setSizeSheet] = useState(null) // { title, options: [{ id, label, price, isOut }] }
   const [numpad, setNumpad] = useState(null) // { productId, value }
   const [chargeModal, setChargeModal] = useState(false)
   const [chargeTip, setChargeTip] = useState(0)
@@ -774,38 +776,77 @@ export default function Till({
               </div>
             )}
             <div className={styles.grid}>
-              {products.filter(p => p.category === cat && (!activeSub || p.subcategory === activeSub)).map(p => {
-                const variantStatus = getVariantStatus(p)
-                const s = stock[p.id] ?? 0
-                const portionsAvailable = p.bottleYield ? Math.floor(s * p.bottleYield) : s
-                const isFood = p.group === 'food'
-                const isOut = isFood ? false : variantStatus ? variantStatus.isOut : (p.bottleYield ? portionsAvailable < 1 : s === 0)
-                const isLow = isFood ? false : variantStatus ? variantStatus.isLow : (p.bottleYield ? portionsAvailable > 0 && portionsAvailable <= 5 : s > 0 && s <= 5)
-                const portionLabel = p.bottleYield ? getPortionLabel(p) : null
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`${styles.prodBtn} ${isOut ? styles.prodOut : ''}`}
-                    onClick={() => openNumpad(p.id)}
-                    disabled={isOut || tabLimitReached}
-                  >
-                    <div className={styles.prodName}>{p.name}</div>
-                    <div className={styles.prodPrice}>{fmt(p.price)}</div>
-                    {!isFood && <div className={`${styles.prodStock} ${isLow ? styles.stockLow : ''}`}>
-                      {isOut
-                        ? 'Out of stock'
-                        : variantStatus
-                          ? variantStatus.display
-                          : p.bottleYield
-                            ? `${portionsAvailable} ${portionLabel} available`
-                            : isLow
-                              ? `Low — ${s} left`
-                              : `${s} in stock`}
-                    </div>}
-                  </button>
-                )
-              })}
+              {(() => {
+                const facts = (p) => {
+                  const variantStatus = getVariantStatus(p)
+                  const s = stock[p.id] ?? 0
+                  const portionsAvailable = p.bottleYield ? Math.floor(s * p.bottleYield) : s
+                  const isFood = p.group === 'food'
+                  const isOut = isFood ? false : variantStatus ? variantStatus.isOut : (p.bottleYield ? portionsAvailable < 1 : s === 0)
+                  const isLow = isFood ? false : variantStatus ? variantStatus.isLow : (p.bottleYield ? portionsAvailable > 0 && portionsAvailable <= 5 : s > 0 && s <= 5)
+                  const portionLabel = p.bottleYield ? getPortionLabel(p) : null
+                  return { variantStatus, s, portionsAvailable, isFood, isOut, isLow, portionLabel }
+                }
+                const visible = products.filter(p => p.category === cat && (!activeSub || p.subcategory === activeSub))
+                // Group products that share a sizeGroup (e.g. one wine sold as 175ml/125ml/carafe/Bottle) into one tile.
+                const groups = []
+                const bySizeGroup = new Map()
+                for (const p of visible) {
+                  if (p.sizeGroup) {
+                    if (!bySizeGroup.has(p.sizeGroup)) { const g = { key: p.sizeGroup, items: [] }; bySizeGroup.set(p.sizeGroup, g); groups.push(g) }
+                    bySizeGroup.get(p.sizeGroup).items.push(p)
+                  } else {
+                    groups.push({ key: p.id, items: [p] })
+                  }
+                }
+                return groups.map(g => {
+                  if (g.items.length === 1) {
+                    const p = g.items[0]
+                    const f = facts(p)
+                    return (
+                      <button
+                        key={g.key}
+                        type="button"
+                        className={`${styles.prodBtn} ${f.isOut ? styles.prodOut : ''}`}
+                        onClick={() => openNumpad(p.id)}
+                        disabled={f.isOut || tabLimitReached}
+                      >
+                        <div className={styles.prodName}>{p.name}</div>
+                        <div className={styles.prodPrice}>{fmt(p.price)}</div>
+                        {!f.isFood && <div className={`${styles.prodStock} ${f.isLow ? styles.stockLow : ''}`}>
+                          {f.isOut
+                            ? 'Out of stock'
+                            : f.variantStatus
+                              ? f.variantStatus.display
+                              : p.bottleYield
+                                ? `${f.portionsAvailable} ${f.portionLabel} available`
+                                : f.isLow
+                                  ? `Low — ${f.s} left`
+                                  : `${f.s} in stock`}
+                        </div>}
+                      </button>
+                    )
+                  }
+                  const allOut = g.items.every(p => facts(p).isOut)
+                  const prices = g.items.map(p => p.price).sort((a, b) => a - b)
+                  return (
+                    <button
+                      key={g.key}
+                      type="button"
+                      className={`${styles.prodBtn} ${allOut ? styles.prodOut : ''}`}
+                      onClick={() => setSizeSheet({
+                        title: g.key,
+                        options: g.items.map(p => ({ id: p.id, label: p.sizeLabel || p.name, price: p.price, isOut: facts(p).isOut })),
+                      })}
+                      disabled={allOut || tabLimitReached}
+                    >
+                      <div className={styles.prodName}>{g.key}</div>
+                      <div className={styles.prodPrice}>{allOut ? 'Out of stock' : `from ${fmt(prices[0])}`}</div>
+                      {!allOut && <div className={styles.prodStock}>{g.items.length} sizes — tap to choose</div>}
+                    </button>
+                  )
+                })
+              })()}
             </div>
           </div>
           )
@@ -989,6 +1030,31 @@ export default function Till({
           </div>
         </div>
       </div>
+
+      {sizeSheet && (
+        <div className={styles.overlay} onClick={() => setSizeSheet(null)}>
+          <div className={styles.sheet} onClick={e => e.stopPropagation()}>
+            <div className={styles.sheetTitle}>{sizeSheet.title}</div>
+            <div className={styles.variantGrid}>
+              {sizeSheet.options.map(opt => (
+                <button
+                  key={opt.id}
+                  className={styles.variantBtn}
+                  disabled={opt.isOut || tabLimitReached}
+                  onClick={() => {
+                    setSizeSheet(null)
+                    openNumpad(opt.id)
+                  }}
+                >
+                  <div>{opt.label}</div>
+                  <div>{opt.isOut ? 'Out of stock' : fmt(opt.price)}</div>
+                </button>
+              ))}
+            </div>
+            <button className={styles.cancelBtn} onClick={() => setSizeSheet(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {discountOpen && (
         <DiscountSheet
