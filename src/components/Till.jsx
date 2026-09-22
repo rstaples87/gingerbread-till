@@ -165,7 +165,7 @@ export default function Till({
   }
 
   // Sub-categories present within a category, in a sensible fixed order, falling back to first-seen order for anything unlisted.
-  const SUBCAT_ORDER = ['Gin', 'Vodka', 'Whiskey', 'Rum', 'Liqueurs', 'Other Spirits', 'Ale', 'Lager', 'Stout', 'White', 'Rose', 'Red', 'Sparkling', 'Other']
+  const SUBCAT_ORDER = ['Gin', 'Vodka', 'Whiskey', 'Rum', 'Liqueurs', 'Other Spirits', 'Ale', 'Lager', 'Stout', 'White', 'Rose', 'Red', 'Sparkling', 'Dessert', 'Bottles', 'Mixers', 'Cordials', 'Juices', 'Water', 'Other']
   const subcatsFor = (cat) => {
     const seen = []
     for (const p of products) {
