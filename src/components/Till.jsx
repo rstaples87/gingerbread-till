@@ -869,11 +869,20 @@ export default function Till({
         })}
       </div>
 
-      {/* Low stock banner */}
+      {/* Low stock banner. Named when there are only a few, otherwise just a count —
+          before a stock take, most or all drinks can show 0 and the full list becomes unreadable. */}
       {(outItems.length > 0 || lowItems.length > 0) && (
         <div className={styles.banner}>
-          {outItems.length > 0 && `⚠ Out of stock: ${outItems.join(', ')}. `}
-          {lowItems.length > 0 && `Low stock: ${lowItems.join(', ')}.`}
+          {outItems.length > 0 && (
+            outItems.length <= 8
+              ? `⚠ Out of stock: ${outItems.join(', ')}. `
+              : `⚠ ${outItems.length} items out of stock — check Stock. `
+          )}
+          {lowItems.length > 0 && (
+            lowItems.length <= 8
+              ? `Low stock: ${lowItems.join(', ')}.`
+              : `${lowItems.length} items low on stock — check Stock.`
+          )}
         </div>
       )}
 
