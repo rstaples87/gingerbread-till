@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT } from '../data'
+import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT, POS_FOOD_CATEGORIES } from '../data'
 import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel, allocateDiscount, lineAmount } from '../utils'
 import DiscountSheet from './DiscountSheet'
 import { features } from '../features'
@@ -183,6 +183,8 @@ export default function Till({
   }
 
   const visibleCats = categories.filter(c => !hiddenCats.has(c))
+  const foodCats = categories.filter(c => POS_FOOD_CATEGORIES.includes(c))
+  const drinkCats = categories.filter(c => !POS_FOOD_CATEGORIES.includes(c))
   const allChipsOpen = categories.length > 0 && hiddenCats.size === 0
 
   const openOrCloseAllChips = () => {
@@ -726,9 +728,23 @@ export default function Till({
         </div>
       )}
 
-      {/* Category toggles */}
+      {/* Category toggles — food and drink on separate lines so it doesn't get crowded */}
+      {foodCats.length > 0 && (
+        <div className={`${styles.catToggles} hide-scroll`}>
+          {foodCats.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              className={`${styles.catToggle} ${hiddenCats.has(cat) ? styles.catOff : styles.catOn}`}
+              onClick={() => toggleCat(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
       <div className={`${styles.catToggles} hide-scroll`}>
-        {categories.map(cat => (
+        {drinkCats.map(cat => (
           <button
             key={cat}
             type="button"
