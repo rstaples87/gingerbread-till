@@ -21,7 +21,7 @@ import Tables from './components/Tables'
 import SplitBill from './components/SplitBill'
 import DiscountSheet from './components/DiscountSheet'
 import { sendStationNotice, stationsFor } from './displayNotices'
-import { features, isPosMode } from './features'
+import { features, isPosMode, receiptBranding } from './features'
 
 // The events Till starts from the built-in bar menu. The Haywain POS starts empty (its menu is entered in Settings),
 // so a fresh POS device never loads the bar menu into the POS database.
@@ -644,10 +644,23 @@ export default function App() {
   const [staffOverlayOpen, setStaffOverlayOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', visible: false })
   const [receiptBill, setReceiptBill] = useState(null)
-  /** Fill in the bill, then print it — see Receipt.jsx and the .receiptPrint rule in index.css. */
+  /** Fill in the bill, then print it — see Receipt.jsx and the .receiptPrint rule in index.css.
+      Waits for the logo image to actually finish loading first: printing before it's decoded
+      shows nothing at all (no image, no fallback text) rather than a slow-loading picture. */
   const printBill = useCallback((bill) => {
     setReceiptBill(bill)
-    setTimeout(() => window.print(), 50)
+    const logoSrc = receiptBranding.logo
+    const go = () => window.print()
+    if (!logoSrc) { setTimeout(go, 50); return }
+    const img = new Image()
+    img.src = logoSrc
+    const done = () => setTimeout(go, 30)
+    if (img.complete) done()
+    else {
+      img.onload = done
+      img.onerror = done
+      setTimeout(done, 1500) // don't block printing forever if the image never loads
+    }
   }, [])
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const [eodReports, setEodReports] = useState([])

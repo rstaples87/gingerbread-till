@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fmt, lineAmount, saleLineText } from '../utils'
 import { receiptBranding } from '../features'
 import styles from './Receipt.module.css'
@@ -8,6 +9,10 @@ import styles from './Receipt.module.css'
  * bill: { title, items, discountOff, tip, total, payment, tenderedAmount, changeGiven, staff, covers, customer, paid }
  */
 export default function Receipt({ bill }) {
+  // Falls back to the plain venue name if the logo genuinely fails to load, so the header is
+  // never blank — App.jsx's printBill() already waits for it to load before printing, so this
+  // is just a safety net for a broken image path, not the everyday case.
+  const [logoFailed, setLogoFailed] = useState(false)
   if (!bill) return null
   const { title, items = [], discountOff, tip, total, payment, tenderedAmount, changeGiven, staff, covers, customer, paid } = bill
   const now = new Date()
@@ -15,8 +20,8 @@ export default function Receipt({ bill }) {
   return (
     <div className={`${styles.sheet} receiptPrint`}>
       <div className={styles.center}>
-        {receiptBranding.logo
-          ? <img className={styles.logo} src={receiptBranding.logo} alt={receiptBranding.name} />
+        {receiptBranding.logo && !logoFailed
+          ? <img className={styles.logo} src={receiptBranding.logo} alt={receiptBranding.name} onError={() => setLogoFailed(true)} />
           : (
             <>
               <div className={styles.brand}>{receiptBranding.name}</div>
