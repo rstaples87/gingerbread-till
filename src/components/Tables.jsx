@@ -20,6 +20,7 @@ function openFor(openedAt, now) {
 export default function Tables({
   floorAreas = [], floorTables = [], floorShapes = [], openTabs = [],
   openNewTabEntry, updateTabDetails, moveTab, mergeTabs, unmergeTab, mergeHistory = {}, openSplit, openDiscount, switchOrder, goToTill, showToast,
+  printBill, currentStaff,
 }) {
   const areas = useMemo(
     () => [...floorAreas].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name)),
@@ -323,6 +324,20 @@ export default function Tables({
                   <div className={styles.pair}>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); openSplit(card.tabId); setCard(null) }}>Split the bill</button>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); openDiscount(card.tabId); setCard(null) }}>Discount / comp</button>
+                    <button
+                      type="button"
+                      className={styles.skip}
+                      onClick={() => printBill({
+                        title: tabLabel(cardTab),
+                        items: cardTab.items,
+                        total: tabTotal(cardTab),
+                        staff: currentStaff,
+                        covers: cardTab.covers,
+                        customer: cardTab.customer,
+                      })}
+                    >
+                      🖨 Print bill
+                    </button>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'move', tabId: card.tabId }); setCard(null) }}>Move to another table</button>
                     <button type="button" className={styles.skip} onClick={() => { saveCard(); setPick({ kind: 'merge', tabId: card.tabId }); setCard(null) }}>Merge with another table</button>
                     {(mergeHistory[card.tabId] || []).map(e => (

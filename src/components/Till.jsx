@@ -23,7 +23,7 @@ export default function Till({
   orders, updateOrder, clearOrder, activeOrderKey, switchOrder,
   openTabs, openNewTabEntry, commitItemsToTab, mergeOrderToTab,
   processCharge, showToast, currentStaff, settleTab, optionGroups = [],
-  managerUnlocked, verifyManagerPin, unlockManager,
+  managerUnlocked, verifyManagerPin, unlockManager, printBill,
 }) {
   const [hiddenCats, setHiddenCats] = useState(() => {
     const list = tillCategories?.length ? [...tillCategories] : [...CATEGORIES]
@@ -1320,6 +1320,20 @@ export default function Till({
                 )}
               </div>
             )}
+            <button
+              type="button"
+              className={styles.cancelBtn}
+              onClick={() => printBill({
+                title: 'Quick sale',
+                items: saleItems || orderToItems(order, products),
+                discountOff,
+                tip: features.tips ? chargeTip : 0,
+                total: payTotal,
+                staff: currentStaff,
+              })}
+            >
+              🖨 Print bill
+            </button>
             <div className={styles.sheetBtns}>
               <button className={styles.cancelBtn} onClick={closeChargeModal}>Cancel</button>
               <button className={styles.confirmBtn} onClick={confirmCharge} disabled={!canConfirmCharge}>Confirm charge</button>
@@ -1390,6 +1404,21 @@ export default function Till({
                 )}
               </div>
             )}
+            <button
+              type="button"
+              className={styles.cancelBtn}
+              onClick={() => printBill({
+                title: tabLabel(settleTabForModal),
+                items: settleTabForModal.items,
+                tip: settleTipAmt,
+                total: settlePayTotal,
+                staff: currentStaff,
+                covers: settleTabForModal.covers,
+                customer: settleTabForModal.customer,
+              })}
+            >
+              🖨 Print bill
+            </button>
             <div className={styles.sheetBtns}>
               <button type="button" className={styles.cancelBtn} onClick={closeSettleModal}>Cancel</button>
               <button

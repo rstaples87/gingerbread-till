@@ -1,0 +1,22 @@
+/* Only ever shown on paper (see the .receiptPrint print rule in index.css) — invisible on screen. */
+.sheet {
+  display: none;
+}
+@media print {
+  .sheet {
+    display: block;
+    width: 76mm;
+    margin: 0 auto;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #000;
+  }
+}
+.center { text-align: center; }
+.brand { font-size: 16px; font-weight: 700; }
+.small { font-size: 11px; }
+.rule { border-top: 1px dashed #000; margin: 6px 0; }
+.line { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+.lineText { flex: 1; white-space: pre-wrap; }
+.lineAmt { flex-shrink: 0; }
+.total { font-weight: 700; font-size: 13px; }

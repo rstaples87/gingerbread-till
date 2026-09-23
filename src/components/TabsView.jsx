@@ -5,7 +5,7 @@ import { features } from '../features'
 import TipPicker from './TipPicker'
 import styles from './TabsView.module.css'
 
-export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, switchOrder, showToast, updateTabLimit, openSplit, openDiscount }) {
+export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, switchOrder, showToast, updateTabLimit, openSplit, openDiscount, printBill, currentStaff }) {
   const [settleModal, setSettleModal] = useState(null) // tabId
   const [settlePayment, setSettlePayment] = useState('cash')
   const [cashTendered, setCashTendered] = useState('')
@@ -226,6 +226,21 @@ export default function TabsView({ openTabs, currentlyIn, settleTab, cancelTab, 
                 )}
               </div>
             )}
+            <button
+              type="button"
+              className={styles.cancelBtn}
+              onClick={() => printBill({
+                title: tabLabel(tab),
+                items: tab.items,
+                tip: features.tips && settlePayment !== 'account' ? tip : 0,
+                total: payTotal,
+                staff: currentStaff,
+                covers: tab.covers,
+                customer: tab.customer,
+              })}
+            >
+              🖨 Print bill
+            </button>
             <div className={styles.sheetBtns}>
               <button type="button" className={styles.cancelBtn} onClick={closeSettleModal}>Cancel</button>
               <button type="button" className={styles.confirmBtn} onClick={confirmSettle} disabled={!canConfirmSettle}>Settle &amp; close tab</button>

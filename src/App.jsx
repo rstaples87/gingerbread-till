@@ -42,6 +42,7 @@ import Settings from './components/Settings'
 import BarView from './components/BarView'
 import StaffOverlay from './components/StaffOverlay'
 import Toast from './components/Toast'
+import Receipt from './components/Receipt'
 import { readSyncQueue, readPendingEodReportRows, readPendingAttendanceRows, readPendingAttendanceSaveRanges, maybeQueueSyncFailure, flushSyncQueue, enqueueSyncQueueItem, isLikelyNetworkFailure } from './syncQueue'
 import {
   syncTransactionToSupabaseFireAndForget,
@@ -642,6 +643,12 @@ export default function App() {
   const [currentlyIn, setCurrentlyIn] = useLocalStorage('bt_currently_in', [])
   const [staffOverlayOpen, setStaffOverlayOpen] = useState(false)
   const [toast, setToast] = useState({ msg: '', visible: false })
+  const [receiptBill, setReceiptBill] = useState(null)
+  /** Fill in the bill, then print it — see Receipt.jsx and the .receiptPrint rule in index.css. */
+  const printBill = useCallback((bill) => {
+    setReceiptBill(bill)
+    setTimeout(() => window.print(), 50)
+  }, [])
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const [eodReports, setEodReports] = useState([])
   const menuSettersRef = useRef({})
@@ -1981,6 +1988,7 @@ export default function App() {
     saveFloorArea, deleteFloorArea,
     goToTill: () => setView('till'),
     showToast,
+    printBill,
   }
 
   return (
@@ -2063,6 +2071,7 @@ export default function App() {
         />
       )}
       <Toast msg={toast.msg} visible={toast.visible} />
+      <Receipt bill={receiptBill} />
     </>
   )
 }
