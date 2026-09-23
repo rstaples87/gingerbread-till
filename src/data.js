@@ -154,10 +154,12 @@ export const TAB_PRESETS = ['Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5
 export const CATEGORIES = ['Wine', 'Beer', 'Cider', 'Spirits', 'Shots', 'Soft Drinks']
 
 /** Starting till categories for the Haywain POS build (editable in Settings). Food ones default new products to 'food'. */
-export const POS_FOOD_CATEGORIES = [
-  'Starters', 'Mains', 'Sides', 'Griddle & Burgers', 'Sharing Boards', 'Sandwiches', 'Half Pints', 'Desserts',
-  'Sunday', 'Breakfast', 'Kids Menu', 'Hot Drinks',
+export const POS_FOOD_CATEGORIES = ['Starters', 'Mains', 'Sides', 'Griddle & Burgers', 'Sharing Boards', 'Desserts', 'Kids Menu']
+/** Their own line under the food row — breakfast/Sunday/sandwiches/half pints aren't every-order items. */
+export const POS_EXTRA_CATEGORIES = ['Breakfast', 'Sunday', 'Sandwiches', 'Half Pints']
+export const POS_TILL_CATEGORIES = [
+  ...POS_FOOD_CATEGORIES, ...POS_EXTRA_CATEGORIES,
+  'Wine', 'Beer', 'Cider', 'Spirits', 'Soft Drinks', 'Low & Free', 'Hot Drinks',
 ]
-export const POS_TILL_CATEGORIES = [...POS_FOOD_CATEGORIES, 'Wine', 'Beer', 'Cider', 'Spirits', 'Soft Drinks', 'Low & Free']
 
 export const STOCK_CATEGORIES = ['Lager', 'Ale', '0% Beer', 'Cider', 'House Spirits', 'Premium Spirits', 'Other Spirits', 'Wine', 'Soft Drinks', 'Mixers']

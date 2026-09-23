@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT, POS_FOOD_CATEGORIES } from '../data'
+import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT, POS_FOOD_CATEGORIES, POS_EXTRA_CATEGORIES } from '../data'
 import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel, allocateDiscount, lineAmount } from '../utils'
 import DiscountSheet from './DiscountSheet'
 import { features } from '../features'
@@ -184,7 +184,8 @@ export default function Till({
 
   const visibleCats = categories.filter(c => !hiddenCats.has(c))
   const foodCats = categories.filter(c => POS_FOOD_CATEGORIES.includes(c))
-  const drinkCats = categories.filter(c => !POS_FOOD_CATEGORIES.includes(c))
+  const extraCats = categories.filter(c => POS_EXTRA_CATEGORIES.includes(c))
+  const drinkCats = categories.filter(c => !POS_FOOD_CATEGORIES.includes(c) && !POS_EXTRA_CATEGORIES.includes(c))
   const allChipsOpen = categories.length > 0 && hiddenCats.size === 0
 
   const openOrCloseAllChips = () => {
@@ -738,6 +739,23 @@ export default function Till({
           <div className={styles.catRowLabel}>Food</div>
           <div className={`${styles.catToggles} hide-scroll`}>
             {foodCats.map(cat => (
+              <button
+                key={cat}
+                type="button"
+                className={`${styles.catToggle} ${hiddenCats.has(cat) ? styles.catOff : styles.catOn}`}
+                onClick={() => toggleCat(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {extraCats.length > 0 && (
+        <div className={styles.catRow}>
+          <div className={styles.catRowLabel}>Extras</div>
+          <div className={`${styles.catToggles} hide-scroll`}>
+            {extraCats.map(cat => (
               <button
                 key={cat}
                 type="button"
