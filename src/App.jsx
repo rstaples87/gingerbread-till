@@ -1074,6 +1074,13 @@ export default function App() {
     setStockRaw(prev => ({ ...prev, [productId]: newQty }))
   }, [])
 
+  /** Stock take — type an exact count for a shared-bottle stock item (e.g. a wine or spirit sold in several sizes). */
+  const setStockItemValue = useCallback((stockKey, val) => {
+    const newQty = Math.max(0, val)
+    if (supabase) upsertStockItemRowToSupabase(stockKey, newQty)
+    setStockItemsRaw(prev => ({ ...prev, [stockKey]: newQty }))
+  }, [])
+
   /** Stock view “Stock take” ± — writes stock_items only (stock_key, qty). */
   const adjustStockItem = useCallback((stockKey, delta) => {
     const prev = stockItemsRef.current
@@ -1929,7 +1936,7 @@ export default function App() {
   const sharedProps = {
     products, setProducts,
     productVariants, setProductVariants,
-    stock, adjustTillStock, setStockValue, adjustStockItem,
+    stock, adjustTillStock, setStockValue, adjustStockItem, setStockItemValue,
     stockItems, setStockItems,
     stockDefinitions, setStockDefinitions,
     tillCategories,
