@@ -49,7 +49,7 @@ function CountRow({ name, meta, value, unit, onCommit, mixerMeta }) {
 }
 
 export default function Stock({
-  products, stock, adjustTillStock, setStockValue, setStockItemValue, stockItems, stockDefinitions, stockCategories,
+  products, stock, adjustTillStock, adjustStockItem, setStockValue, setStockItemValue, stockItems, stockDefinitions, stockCategories,
   tillCategories, productVariants = {},
 }) {
   const [tab, setTab] = useState('till')
@@ -73,13 +73,19 @@ export default function Stock({
         </div>
 
         {tab === 'till' && products.filter(p => p.group !== 'food').map(p => {
-          const s = stock[p.id] ?? 0
-          const portions = p.bottleYield ? Math.floor(s * p.bottleYield) : s
-          const isOut = p.bottleYield ? portions < 1 : s === 0
-          const isLow = p.bottleYield ? portions > 0 && portions <= 5 : s > 0 && s <= 5
+          // A size sharing a bottle with others (e.g. a wine's 175ml/125ml/Bottle, or a spirit's Single/Double)
+          // has no stock of its own — its number lives on the shared stock_items pool via its variant.
+          const variant = productVariants[p.id]
+          const stockId = variant?.stockIds?.[0]
+          const shared = stockId ? (stockItems?.[stockId] ?? 0) : null
+          const s = variant ? shared : (stock[p.id] ?? 0)
+          const portions = variant ? Math.floor(shared / (variant.deduct || 1)) : (p.bottleYield ? Math.floor(s * p.bottleYield) : s)
+          const isOut = variant ? portions < 1 : (p.bottleYield ? portions < 1 : s === 0)
+          const isLow = variant ? (portions > 0 && portions <= 5) : (p.bottleYield ? portions > 0 && portions <= 5 : s > 0 && s <= 5)
           const badgeClass = isOut ? styles.badgeOut : isLow ? styles.badgeLow : styles.badgeOk
           const badgeText = isOut ? 'Out' : isLow ? 'Low' : 'OK'
-          const portionLabel = p.bottleYield ? getPortionLabel(p) : ''
+          const portionLabel = getPortionLabel(p)
+          const onAdjust = delta => (variant ? adjustStockItem(stockId, delta) : adjustTillStock(p.id, delta))
           return (
             <div key={p.id} className={styles.item}>
               <div className={styles.info}>
@@ -89,15 +95,16 @@ export default function Stock({
                 </div>
                 <div className={styles.meta}>
                   {p.category} · {fmt(p.price)}
-                  {p.bottleYield && (
+                  {variant && <span className={styles.portionMeta}> · shares a bottle with its other sizes · {portions} {portionLabel} left in it</span>}
+                  {!variant && p.bottleYield && (
                     <span className={styles.portionMeta}> · {portions} {portionLabel} available</span>
                   )}
                 </div>
               </div>
               <div className={styles.controls}>
-                <button className={styles.qtyBtn} onClick={() => adjustTillStock(p.id, -1)}>−</button>
-                <span className={styles.qty}>{p.bottleYield ? `${formatBottles(s)} ${getStockUnit(p)}` : s}</span>
-                <button className={styles.qtyBtn} onClick={() => adjustTillStock(p.id, 1)}>+</button>
+                <button className={styles.qtyBtn} onClick={() => onAdjust(-1)}>−</button>
+                <span className={styles.qty}>{(variant || p.bottleYield) ? `${formatBottles(s)} ${getStockUnit(p)}` : s}</span>
+                <button className={styles.qtyBtn} onClick={() => onAdjust(1)}>+</button>
               </div>
             </div>
           )
