@@ -10,7 +10,13 @@ function formatBottles(v) {
 }
 
 function getPortionLabel(product) {
+  if (product.portionSize === 'pint') return 'pints'
   return product.portionSize >= 100 ? 'glasses' : 'measures'
+}
+
+/** The unit staff count in when they do a stock take — a keg for draught, otherwise a bottle. */
+function getStockUnit(product) {
+  return product.portionSize === 'pint' ? 'kegs' : 'bottles'
 }
 
 export default function Stock({ products, stock, adjustTillStock, adjustStockItem, stockItems, stockDefinitions, stockCategories }) {
@@ -52,7 +58,7 @@ export default function Stock({ products, stock, adjustTillStock, adjustStockIte
               </div>
               <div className={styles.controls}>
                 <button className={styles.qtyBtn} onClick={() => adjustTillStock(p.id, -1)}>−</button>
-                <span className={styles.qty}>{p.bottleYield ? `${formatBottles(s)} bottles` : s}</span>
+                <span className={styles.qty}>{p.bottleYield ? `${formatBottles(s)} ${getStockUnit(p)}` : s}</span>
                 <button className={styles.qtyBtn} onClick={() => adjustTillStock(p.id, 1)}>+</button>
               </div>
             </div>
