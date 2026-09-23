@@ -41,7 +41,18 @@ function snapshotSessionTransactions(transactionsRef) {
   return stored
 }
 
-function PastReportTransactions({ sessionDate, savedTransactionIds, visibleStaff, styles: s }) {
+function PastReportTransactions({ sessionDate, savedTransactionIds, visibleStaff, styles: s, printBill }) {
+  const reprintTx = tx => printBill({
+    title: tx.type === 'tab' ? tx.tabName : 'Quick sale',
+    items: tx.items,
+    tip: tx.tip,
+    total: tx.total,
+    payment: tx.payment,
+    tenderedAmount: tx.tenderedAmount ?? undefined,
+    changeGiven: tx.changeGiven,
+    staff: tx.staff,
+    paid: true,
+  })
   const [loading, setLoading] = useState(false)
   const [transactions, setTransactions] = useState([])
   const [fetchError, setFetchError] = useState(null)
@@ -108,6 +119,7 @@ function PastReportTransactions({ sessionDate, savedTransactionIds, visibleStaff
               {tx.type === 'tab' && <span className={`${s.badge} ${s.badgeTab}`}>Tab: {tx.tabName}</span>}
               {tx.tip > 0 && <span className={`${s.badge} ${s.badgeTab}`}>+{fmt(tx.tip)} tip</span>}
               {tx.voided && <span className={`${s.badge} ${s.badgeVoid}`}>Voided</span>}
+              <button type="button" className={s.voidBtn} onClick={() => reprintTx(tx)}>🖨 Reprint</button>
             </div>
             <div className={`${s.txDetail} ${tx.voided ? s.txDetailVoided : ''}`}>
               {tx.items.map(saleLineText).join(', ')}
@@ -212,8 +224,19 @@ export default function Sales({
   clearSessionTransactions,
   eodReports, setEodReports, refreshEodReports,
   voidTransaction, products,
-  stockItems, stockDefinitions, productVariants, showToast, openTabs = [],
+  stockItems, stockDefinitions, productVariants, showToast, openTabs = [], printBill,
 }) {
+  const reprintTx = tx => printBill({
+    title: tx.type === 'tab' ? tx.tabName : 'Quick sale',
+    items: tx.items,
+    tip: tx.tip,
+    total: tx.total,
+    payment: tx.payment,
+    tenderedAmount: tx.tenderedAmount ?? undefined,
+    changeGiven: tx.changeGiven,
+    staff: tx.staff,
+    paid: true,
+  })
   const [reportOpen, setReportOpen] = useState(false)
   const reportOpenRef = useRef(false)
   const [stockReportOpen, setStockReportOpen] = useState(false)
@@ -511,6 +534,7 @@ export default function Sales({
                     </span>
                     {tx.type === 'tab' && <span className={`${styles.badge} ${styles.badgeTab}`}>Tab: {tx.tabName}</span>}
                     {tx.voided && <span className={`${styles.badge} ${styles.badgeVoid}`}>Voided</span>}
+                    <button type="button" className={styles.voidBtn} onClick={() => reprintTx(tx)}>🖨 Reprint</button>
                     {!tx.voided && (
                       <button type="button" className={styles.voidBtn} onClick={() => { if (confirm('Void this transaction? Stock will be restored.')) voidTransaction(tx.id) }}>Void</button>
                     )}
@@ -606,6 +630,7 @@ export default function Sales({
                         savedTransactionIds={(entry.reportData?.transactions ?? []).map(t => t.id)}
                         visibleStaff={visibleStaff}
                         styles={styles}
+                        printBill={printBill}
                       />
                     </div>
                   )}
