@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CATEGORIES, TAB_PRESETS, DEFAULT_TAB_LIMIT, POS_FOOD_CATEGORIES, POS_EXTRA_CATEGORIES } from '../data'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel, allocateDiscount, lineAmount } from '../utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, mixerServesPerDrink, tabTotal, localSessionDateString, lineProductId, orderLineKey, lineDetailText, saleLineText, stationTickets, tabLabel, allocateDiscount, lineAmount, normalizeChoice, lineUnitPrice } from '../utils'
 import DiscountSheet from './DiscountSheet'
 import { features } from '../features'
 import TipPicker from './TipPicker'
@@ -313,7 +313,11 @@ export default function Till({
     }
     const chosenOptions = itemGroups
       .filter(g => numpad.options?.[g.id])
-      .map(g => ({ group: g.name, choice: numpad.options[g.id] }))
+      .map(g => {
+        const label = numpad.options[g.id]
+        const match = (g.choices || []).map(normalizeChoice).find(c => c.label === label)
+        return { group: g.name, choice: label, ...(match?.price ? { price: match.price } : {}) }
+      })
     const lineNote = (numpad.note || '').trim()
     const lineKey = orderLineKey(id, chosenOptions, lineNote)
 
@@ -534,7 +538,7 @@ export default function Till({
         const opts = (typeof line === 'object' ? line?.options || [] : []).map(o => o.choice).join(', ')
         const lineNote = typeof line === 'object' ? line?.note : ''
         lines.push({
-          name, qty, price: Number(p.price), group: p.group === 'food' ? 'food' : 'drink',
+          name, qty, price: lineUnitPrice(line, p), group: p.group === 'food' ? 'food' : 'drink',
           ...(opts ? { options: opts } : {}),
           ...(lineNote ? { note: lineNote } : {}),
         })
@@ -542,7 +546,7 @@ export default function Till({
       }
       const detail = lineDetailText(line)
       if (detail) name = `${name} (${detail})`
-      lines.push({ name, qty, price: Number(p.price) })
+      lines.push({ name, qty, price: lineUnitPrice(line, p) })
     }
     return lines
   }
@@ -1140,19 +1144,19 @@ export default function Till({
                     <div key={g.id} className={styles.optGroup}>
                       <div className={styles.optLabel}>{g.name}{g.required ? ' *' : ' (optional)'}</div>
                       <div className={styles.optChips}>
-                        {g.choices.map(c => {
-                          const on = numpad.options?.[g.id] === c
+                        {g.choices.map(normalizeChoice).map(({ label, price }) => {
+                          const on = numpad.options?.[g.id] === label
                           return (
                             <button
-                              key={c}
+                              key={label}
                               type="button"
                               className={`${styles.optChip} ${on ? styles.optChipOn : ''}`}
                               onClick={() => setNumpad(prev => ({
                                 ...prev,
-                                options: { ...(prev.options || {}), [g.id]: on && !g.required ? undefined : c },
+                                options: { ...(prev.options || {}), [g.id]: on && !g.required ? undefined : label },
                               }))}
                             >
-                              {c}
+                              {label}{price ? ` (+${fmt(price)})` : ''}
                             </button>
                           )
                         })}

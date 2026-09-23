@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CATEGORIES, STOCK_CATEGORIES } from '../data'
-import { fmt } from '../utils'
+import { fmt, normalizeChoice } from '../utils'
 import { features } from '../features'
 import FloorPlanEditor from './FloorPlanEditor'
 import { POS_FOOD_CATEGORIES } from '../data'
@@ -309,14 +309,24 @@ export default function Settings({
   ]
 
   const openNewGroup = () => setGroupForm({ id: null, name: '', required: true, choicesText: '' })
-  const openEditGroup = (g) => setGroupForm({ id: g.id, name: g.name, required: g.required !== false, choicesText: (g.choices || []).join('\n') })
+  const openEditGroup = (g) => setGroupForm({
+    id: g.id,
+    name: g.name,
+    required: g.required !== false,
+    choicesText: (g.choices || []).map(normalizeChoice).map(({ label, price }) => (price ? `${label} | ${price.toFixed(2)}` : label)).join('\n'),
+  })
   const submitGroup = (event) => {
     event.preventDefault()
+    const choices = groupForm.choicesText.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+      const [label, priceStr] = line.split('|').map(s => s.trim())
+      const price = priceStr ? Number(priceStr) : 0
+      return price > 0 ? { label, price } : label
+    })
     const saved = saveOptionGroup({
       id: groupForm.id,
       name: groupForm.name,
       required: groupForm.required,
-      choices: groupForm.choicesText.split('\n'),
+      choices,
     })
     if (saved) setGroupForm(null)
   }
@@ -468,7 +478,9 @@ export default function Settings({
               <div key={g.id} className={styles.row}>
                 <div className={styles.rowInfo}>
                   <div className={styles.name}>{g.name} {g.required ? '(required)' : '(optional)'}</div>
-                  <div className={styles.meta}>{(g.choices || []).join(', ')}</div>
+                  <div className={styles.meta}>
+                    {(g.choices || []).map(normalizeChoice).map(({ label, price }) => (price ? `${label} (+${fmt(price)})` : label)).join(', ')}
+                  </div>
                 </div>
                 <div className={styles.rowActions}>
                   <button type="button" className={styles.secondaryBtn} onClick={() => openEditGroup(g)}>Edit</button>
@@ -572,7 +584,7 @@ export default function Settings({
               Must choose one (required)
             </label>
             <label className={styles.field}>
-              <span>Choices (one per line)</span>
+              <span>Choices (one per line — add "| price" for a paid add-on, e.g. "Add bacon | 3.00")</span>
               <textarea rows={6} value={groupForm.choicesText} onChange={event => setGroupForm(f => ({ ...f, choicesText: event.target.value }))} />
             </label>
             <button type="submit" className={styles.primaryBtn}>Save</button>

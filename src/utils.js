@@ -48,6 +48,21 @@ const getLineStockId = (line) => (typeof line === 'object' ? line?.selectedStock
 const getLineMixerId = (line) => (typeof line === 'object' ? line?.selectedMixerId : null)
 const getLineDisplayName = (line) => (typeof line === 'object' ? line?.displayName : null)
 
+/** A dish-option choice, normalized: legacy groups store a plain string choice (no price); priced add-ons (e.g. "Add bacon") store { label, price }. */
+export const normalizeChoice = (c) => (
+  c && typeof c === 'object' ? { label: c.label ?? '', price: Number(c.price) || 0 } : { label: c ?? '', price: 0 }
+)
+
+/** Per-unit surcharge from an order line's chosen dish options (e.g. +£3 for bacon), so "Bacon" always prices with its burger rather than as its own line. */
+const lineOptionsPrice = (line) => (
+  typeof line === 'object' && Array.isArray(line?.options)
+    ? line.options.reduce((sum, o) => sum + (Number(o.price) || 0), 0)
+    : 0
+)
+
+/** Effective per-unit price: the product's price plus any priced dish options chosen on this line. */
+export const lineUnitPrice = (line, product) => (Number(product?.price) || 0) + lineOptionsPrice(line)
+
 /** Panel/receipt label: variant display name when set, else product name */
 export const orderLineLabel = (line, productName) => getLineDisplayName(line) || productName
 
@@ -74,7 +89,7 @@ export function orderLineKey(productId, options, note) {
 /** "Medium rare, Chips — “sauce on side”" for an order line or a sale line. */
 export function lineDetailText(line) {
   if (!line || typeof line !== 'object') return ''
-  const opts = (line.options || []).map(o => o.choice).join(', ')
+  const opts = (line.options || []).map(o => o.price ? `${o.choice} (+${fmt(o.price)})` : o.choice).join(', ')
   return [opts, line.note ? '“' + line.note + '”' : ''].filter(Boolean).join(' — ')
 }
 
@@ -82,7 +97,7 @@ export const getOrderTotal = (order, products) =>
   Object.entries(order).reduce((sum, [id, line]) => {
     const p = products.find(x => x.id === lineProductId(id))
     const qty = getLineQty(line)
-    return sum + (p ? p.price * qty : 0)
+    return sum + (p ? lineUnitPrice(line, p) * qty : 0)
   }, 0)
 
 /** VAT rate and food/drink group copied onto every sale line, so past reports never change if a product is edited later. */
@@ -100,7 +115,7 @@ export const orderToItems = (order, products) =>
       productId: p.id,
       name: orderLineLabel(line, p.name),
       qty: getLineQty(line),
-      price: p.price,
+      price: lineUnitPrice(line, p),
       selectedStockId: getLineStockId(line),
       selectedMixerId: getLineMixerId(line),
       displayName: getLineDisplayName(line) || undefined,

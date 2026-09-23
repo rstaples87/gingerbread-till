@@ -30,7 +30,7 @@ const INITIAL_STOCK_ITEMS = isPosMode ? [] : BAR_STOCK_ITEMS
 const INITIAL_PRODUCT_VARIANTS = isPosMode ? {} : BAR_PRODUCT_VARIANTS
 const DEFAULT_TILL_CATEGORIES = isPosMode ? POS_TILL_CATEGORIES : BAR_TILL_CATEGORIES
 import { logSupabaseWrite } from './supabaseWriteLog'
-import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData, unmergeTabData, takeItemsPart, takeEvenShare, allocateDiscount, clearDiscount, lineAmount } from './utils'
+import { fmt, getOrderTotal, orderToItems, orderLineLabel, tabTotal, mixerBottleDeductionForLine, localSessionDateString, lineTaxFields, lineProductId, lineSignature, tabLabel, tableLabel, mergeTabData, unmergeTabData, takeItemsPart, takeEvenShare, allocateDiscount, clearDiscount, lineAmount, lineUnitPrice } from './utils'
 import Header from './components/Header'
 import Nav from './components/Nav'
 import Till from './components/Till'
@@ -1222,7 +1222,7 @@ export default function App() {
           })
           if (ex) ex.qty += qty
           else newItems.push({
-            name: itemName, qty, price: p.price, productId: p.id, selectedStockId, selectedMixerId,
+            name: itemName, qty, price: lineUnitPrice(line, p), productId: p.id, selectedStockId, selectedMixerId,
             ...(lineOptions.length ? { options: lineOptions } : {}),
             ...(lineNote ? { note: lineNote } : {}),
             ...lineTaxFields(p),
