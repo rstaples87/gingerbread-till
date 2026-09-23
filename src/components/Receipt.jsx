@@ -1,5 +1,5 @@
 import { fmt, lineAmount, saleLineText } from '../utils'
-import { branding } from '../features'
+import { receiptBranding } from '../features'
 import styles from './Receipt.module.css'
 
 /**
@@ -15,7 +15,8 @@ export default function Receipt({ bill }) {
   return (
     <div className={`${styles.sheet} receiptPrint`}>
       <div className={styles.center}>
-        <div className={styles.brand}>{branding.appTitle}</div>
+        <div className={styles.brand}>{receiptBranding.name}</div>
+        {receiptBranding.tagline && <div className={styles.tagline}>{receiptBranding.tagline}</div>}
         <div className={styles.small}>{now.toLocaleDateString('en-GB')} {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>
         {title && <div className={styles.small}>{title}</div>}
         {customer && <div className={styles.small}>{customer}{covers != null ? ` · ${covers} covers` : ''}</div>}

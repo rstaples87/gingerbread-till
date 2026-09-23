@@ -13,6 +13,12 @@ export const branding = {
   appTitle: isPosMode ? 'Gingerbread POS' : 'Gingerbread Till',
 }
 
+/** What goes on the customer-facing printed bill/receipt — the venue's own name, not the app's. */
+export const receiptBranding = {
+  name: isPosMode ? 'THE HAYWAIN' : branding.appTitle,
+  tagline: isPosMode ? 'Country Pub & Kitchen' : '',
+}
+
 export const features = {
   // VAT rate and food/drink group are always recorded on sales (defaults: 20%, drink);
   // only the editor fields for changing them are POS-only.
