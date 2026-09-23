@@ -17,6 +17,8 @@ export const branding = {
 export const receiptBranding = {
   name: isPosMode ? 'THE HAYWAIN' : branding.appTitle,
   tagline: isPosMode ? 'Country Pub & Kitchen' : '',
+  // The Haywain's own logo, used instead of the plain text name/tagline above when set.
+  logo: isPosMode ? '/haywain-logo.png' : null,
 }
 
 export const features = {

@@ -15,8 +15,14 @@ export default function Receipt({ bill }) {
   return (
     <div className={`${styles.sheet} receiptPrint`}>
       <div className={styles.center}>
-        <div className={styles.brand}>{receiptBranding.name}</div>
-        {receiptBranding.tagline && <div className={styles.tagline}>{receiptBranding.tagline}</div>}
+        {receiptBranding.logo
+          ? <img className={styles.logo} src={receiptBranding.logo} alt={receiptBranding.name} />
+          : (
+            <>
+              <div className={styles.brand}>{receiptBranding.name}</div>
+              {receiptBranding.tagline && <div className={styles.tagline}>{receiptBranding.tagline}</div>}
+            </>
+          )}
         <div className={styles.small}>{now.toLocaleDateString('en-GB')} {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</div>
         {title && <div className={styles.small}>{title}</div>}
         {customer && <div className={styles.small}>{customer}{covers != null ? ` · ${covers} covers` : ''}</div>}
