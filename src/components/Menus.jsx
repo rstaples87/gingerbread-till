@@ -287,6 +287,7 @@ export default function Menus({
     while (row.cols.length < n) row.cols.push([])
     while (row.cols.length > n) { const extra = row.cols.pop(); row.cols[row.cols.length - 1].push(...extra) }
   })
+  const setRowValign = (r, v) => edit(doc => { if (v) doc.rows[r].valign = v; else delete doc.rows[r].valign })
   const setRowWidths = (r, widths) => edit(doc => { if (widths) doc.rows[r].widths = widths; else delete doc.rows[r].widths })
   const removeRow = (r) => {
     if (!window.confirm('Remove this whole row and everything in it?')) return
@@ -482,6 +483,15 @@ export default function Menus({
                         <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option>
                       </select>
                     </label>
+                    {row.cols.length > 1 && (
+                      <label className={styles.check}>Line up
+                        <select className={styles.input} value={row.valign || ''} onChange={e => setRowValign(r, e.target.value)}>
+                          <option value="">Top</option>
+                          <option value="middle">Middle</option>
+                          <option value="bottom">Bottom</option>
+                        </select>
+                      </label>
+                    )}
                     {row.cols.length === 2 && (
                       <label className={styles.check}>Widths
                         <select className={styles.input} value={row.widths || ''} onChange={e => setRowWidths(r, e.target.value)}>

@@ -10,7 +10,8 @@
  *   rows: [{ id, cols: [[block, ...], [block, ...]] }],   // each row is a grid of 1-3 columns, each column a stack of blocks
  *   footer: '',
  * }
- * row may carry `widths` (a CSS grid-template-columns value) to make columns unequal.
+ * row may carry `widths` (a CSS grid-template-columns value) to make columns unequal, and `valign` ('middle' | 'bottom')
+ * to line its columns up against the tallest one (default: top).
  * block = { id, type: 'section', title, headingPrice, headingPriceProductId, note, boxed, align, priceLayout, sideTitle, itemColumns (1|2), items: [item] }
  *       | { id, type: 'text', text, boxed, align, bold }
  *       | { id, type: 'image', art, width }

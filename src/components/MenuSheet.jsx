@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { MENU_ART, MENU_LOGO_SRC, itemPriceText, headingText } from '../menuDoc'
 import styles from './MenuSheet.module.css'
 
+const ROW_ALIGN = { middle: 'center', bottom: 'end' }
 const lines = (s) => String(s ?? '').split('\n')
 
 function Diet({ codes, style }) {
@@ -124,7 +125,7 @@ export default function MenuSheet({ doc, products, sheetRef }) {
       ) : null}
 
       {(doc.rows ?? []).map(row => (
-        <div key={row.id} className={styles.row} style={{ '--cols': row.cols.length, ...(row.widths ? { gridTemplateColumns: row.widths } : {}) }}>
+        <div key={row.id} className={styles.row} style={{ '--cols': row.cols.length, ...(row.widths ? { gridTemplateColumns: row.widths } : {}), ...(ROW_ALIGN[row.valign] ? { alignItems: ROW_ALIGN[row.valign] } : {}) }}>
           {row.cols.map((col, ci) => (
             <div key={ci} className={styles.col}>
               {col.map(b => <Block key={b.id} block={b} doc={doc} productById={productById} />)}

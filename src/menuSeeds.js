@@ -218,7 +218,7 @@ function sundayThree() {
     header: { ...d.header, logo: 'none' },
     rows: [
       row([logo(60), starters], [roasts], [alt]),
-      { ...row([prices], [{ ...desserts, itemColumns: 2 }]), widths: 'calc((100% - 8mm) / 3) 1fr' },
+      { ...row([prices], [{ ...desserts, itemColumns: 2 }]), widths: 'calc((100% - 8mm) / 3) 1fr', valign: 'middle' },
     ],
   }
 }
