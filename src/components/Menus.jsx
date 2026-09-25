@@ -74,11 +74,21 @@ function ItemRow({ item, block, idx, count, layoutMode, doc, productById, patch,
       <button type="button" className={styles.del} onClick={remove} aria-label="Remove">✕</button>
     </span>
   )
+  const sizeInput = (
+    <input
+      className={`${styles.input} ${styles.size}`}
+      type="number" min="6" max="30" step="0.5" placeholder="pt"
+      title="Text size for just this line (blank = same as the rest of the menu)"
+      value={item.fontSize ?? ''}
+      onChange={e => patch({ fontSize: e.target.value === '' ? undefined : Number(e.target.value) })}
+    />
+  )
   if (item.kind === 'heading') {
     return (
       <div className={styles.itemRow}>
         <span className={styles.kind}>Sub-heading</span>
         <input className={styles.input} value={item.name} onChange={e => patch({ name: e.target.value })} />
+        {sizeInput}
         {arrows}
       </div>
     )
@@ -88,6 +98,7 @@ function ItemRow({ item, block, idx, count, layoutMode, doc, productById, patch,
       <div className={styles.itemRow}>
         <span className={styles.kind}>Text</span>
         <textarea className={styles.input} rows={2} value={item.desc} onChange={e => patch({ desc: e.target.value })} />
+        {sizeInput}
         {arrows}
       </div>
     )
@@ -108,6 +119,7 @@ function ItemRow({ item, block, idx, count, layoutMode, doc, productById, patch,
               <button type="button" className={styles.linkBtn} onClick={openLink}>🔗 link to till</button>
             </>
           )}
+          {sizeInput}
           {arrows}
         </div>
         <textarea className={styles.input} rows={item.desc && item.desc.length > 60 ? 2 : 1} placeholder="Description (optional)" value={item.desc || ''} onChange={e => patch({ desc: e.target.value })} />
@@ -515,6 +527,9 @@ export default function Menus({
                                 )}
                               </div>
                               <textarea className={styles.input} rows={1} placeholder="Intro line under the title (optional)" value={b.note || ''} onChange={e => withBlock(b.id, x => { x.note = e.target.value })} />
+                              <label className={styles.check}>Whole section text size (pt)
+                                <input className={`${styles.input} ${styles.size}`} type="number" min="6" max="30" step="0.5" placeholder="menu" value={b.fontSize ?? ''} onChange={e => withBlock(b.id, x => { x.fontSize = e.target.value === '' ? undefined : Number(e.target.value) })} />
+                              </label>
                               {layoutMode && (
                                 <div className={styles.styleRow}>
                                   <label className={styles.check}><input type="checkbox" checked={!!b.boxed} onChange={e => withBlock(b.id, x => { x.boxed = e.target.checked })} /> Box</label>
@@ -551,6 +566,9 @@ export default function Menus({
                           {b.type === 'text' && (
                             <>
                               <textarea className={styles.input} rows={3} value={b.text} onChange={e => withBlock(b.id, x => { x.text = e.target.value })} />
+                              <label className={styles.check}>Text size (pt)
+                                <input className={`${styles.input} ${styles.size}`} type="number" min="6" max="30" step="0.5" placeholder="menu" value={b.fontSize ?? ''} onChange={e => withBlock(b.id, x => { x.fontSize = e.target.value === '' ? undefined : Number(e.target.value) })} />
+                              </label>
                               {layoutMode && (
                                 <div className={styles.styleRow}>
                                   <label className={styles.check}><input type="checkbox" checked={!!b.boxed} onChange={e => withBlock(b.id, x => { x.boxed = e.target.checked })} /> Box</label>

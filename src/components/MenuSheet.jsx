@@ -17,14 +17,17 @@ function Diet({ codes, style }) {
   )
 }
 
+const ptStyle = (pt) => (Number(pt) > 0 ? { fontSize: `${Number(pt)}pt` } : undefined)
+
 function Item({ item, block, doc, productById }) {
-  if (item.kind === 'heading') return <div className={styles.subheading}>{item.name}</div>
-  if (item.kind === 'note') return <div className={styles.noteLine}>{lines(item.desc).map((l, i) => <div key={i}>{l}</div>)}</div>
+  const sz = ptStyle(item.fontSize)
+  if (item.kind === 'heading') return <div className={styles.subheading} style={sz}>{item.name}</div>
+  if (item.kind === 'note') return <div className={styles.noteLine} style={sz}>{lines(item.desc).map((l, i) => <div key={i}>{l}</div>)}</div>
   const price = itemPriceText(item, productById, doc.priceFormat)
   const right = block.priceLayout === 'right'
   const nameEl = <span className={item.plain ? styles.namePlain : styles.name}>{item.name}</span>
   return (
-    <div className={`${styles.item} ${item.plain && !item.desc ? styles.itemCompact : ''}`}>
+    <div className={`${styles.item} ${item.plain && !item.desc ? styles.itemCompact : ''}`} style={sz}>
       {right ? (
         <div className={styles.nameRow}>
           <span>{nameEl}<Diet codes={item.diet} style={doc.dietaryStyle} /></span>
@@ -63,13 +66,13 @@ function Block({ block, doc, productById }) {
   }
   const cls = [styles.block, block.boxed ? styles.boxed : '', block.align === 'center' ? styles.center : ''].filter(Boolean).join(' ')
   if (block.type === 'text') {
-    return <div className={cls}><div className={block.bold ? styles.name : ''}>{lines(block.text).map((l, i) => <div key={i}>{l}</div>)}</div></div>
+    return <div className={cls} style={ptStyle(block.fontSize)}><div className={block.bold ? styles.name : ''}>{lines(block.text).map((l, i) => <div key={i}>{l}</div>)}</div></div>
   }
   const hp = headingText(block, productById, doc.priceFormat)
   const title = block.title ? `${block.title}${hp ? ` - ${hp}` : ''}` : ''
   if (block.sideTitle) {
     return (
-      <div className={styles.sideBlock}>
+      <div className={styles.sideBlock} style={ptStyle(block.fontSize)}>
         <div className={styles.sideTitle}>{block.title}</div>
         <div className={`${styles.sideBody} ${styles.center}`}>
           {lines(block.note).filter(Boolean).map((l, i) => <div key={i} className={styles.noteLine}>{l}</div>)}
@@ -79,7 +82,7 @@ function Block({ block, doc, productById }) {
     )
   }
   return (
-    <div className={cls}>
+    <div className={cls} style={ptStyle(block.fontSize)}>
       {title && <div className={styles.title}>{title}</div>}
       {block.note && <div className={styles.noteLine}>{lines(block.note).map((l, i) => <div key={i}>{l}</div>)}</div>}
       <div className={block.itemColumns === 2 ? styles.twoCol : undefined}>

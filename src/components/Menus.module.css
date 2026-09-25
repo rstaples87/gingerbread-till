@@ -40,6 +40,7 @@
 .input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; width: 100%; font-family: inherit; color: var(--text); background: var(--white); resize: vertical; }
 .grow { flex: 1; min-width: 0; }
 .price { width: 76px; flex-shrink: 0; }
+.size { width: 64px; flex-shrink: 0; }
 .sectionTitle { font-weight: 700; }
 .itemRow { display: flex; gap: 6px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--border); }
 .itemMain { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }

@@ -15,7 +15,8 @@
  *       | { id, type: 'text', text, boxed, align, bold }
  *       | { id, type: 'image', art, width }
  *       | { id, type: 'logo', width }
- * item  = { id, kind: 'dish' | 'heading' | 'note', name, desc, price, productId, diet: ['V', ...], plain }
+ * item  = { id, kind: 'dish' | 'heading' | 'note', name, desc, price, productId, diet: ['V', ...], plain, fontSize }
+ * Any section/text block and any item can carry its own `fontSize` (pt) to override the menu's text size.
  * A dish with a productId takes its price live from the till, so a price change is made once.
  */
 
