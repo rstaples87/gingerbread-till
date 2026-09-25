@@ -38,6 +38,8 @@ export const features = {
   discounts: isPosMode,
   // Optional tip added on the final payment screen only (never part of the bill, sales or VAT). POS only.
   tips: isPosMode,
+  // Printable menus: templates per sitting (lunch, evening, kids...) the team can edit and print. POS only.
+  menus: isPosMode,
 }
 
 /** Quick tip choices, as a percentage of the amount being paid. */

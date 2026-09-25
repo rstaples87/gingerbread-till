@@ -61,10 +61,24 @@ input { font-family: inherit; }
 @media print {
   body * { visibility: hidden; }
   .receiptPrint, .receiptPrint * { visibility: visible; }
+  .menuPrintRoot, .menuPrintRoot * { visibility: visible; }
   .receiptPrint {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
   }
+}
+
+/* Printing a menu: the sheet is rendered straight into <body> (outside #root), so hide the whole app
+   and print the sheet on its own A4 page, portrait or landscape to suit the menu. */
+@page menuPortrait { size: A4 portrait; margin: 0; }
+@page menuLandscape { size: A4 landscape; margin: 0; }
+.menuPrintRoot { display: none; }
+@media print {
+  body.printing-menu { display: block; background: #fff; min-height: 0; }
+  body.printing-menu > *:not(.menuPrintRoot) { display: none !important; }
+  body.printing-menu .menuPrintRoot { display: block; }
+  .menuPagePortrait { page: menuPortrait; }
+  .menuPageLandscape { page: menuLandscape; }
 }

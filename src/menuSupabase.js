@@ -13,6 +13,8 @@ export const MENU_OP_TYPES = new Set([
   'menu_category',
   'option_group',
   'option_group_delete',
+  'menu_doc',
+  'menu_doc_delete',
   'floor_area',
   'floor_area_delete',
   'floor_table',
@@ -88,6 +90,10 @@ export async function applyMenuOp(type, payload) {
       res = await supabase.from('menu_option_groups').upsert(payload, { onConflict: 'id' })
     } else if (type === 'option_group_delete') {
       res = await supabase.from('menu_option_groups').delete().eq('id', payload.id)
+    } else if (type === 'menu_doc') {
+      res = await supabase.from('menu_docs').upsert(payload, { onConflict: 'id' })
+    } else if (type === 'menu_doc_delete') {
+      res = await supabase.from('menu_docs').delete().eq('id', payload.id)
     } else if (type === 'floor_area') {
       res = await supabase.from('floor_areas').upsert(payload, { onConflict: 'id' })
     } else if (type === 'floor_area_delete') {
@@ -117,6 +123,7 @@ export async function fetchMenuFromSupabase() {
   try {
     // Option groups only exist in the POS database.
     const og = features.foodOptions ? await supabase.from('menu_option_groups').select('*') : { data: null, error: null }
+    const md = features.menus ? await supabase.from('menu_docs').select('*') : { data: null, error: null }
     const fa = features.tables ? await supabase.from('floor_areas').select('*') : { data: null, error: null }
     const ft = features.tables ? await supabase.from('floor_tables').select('*') : { data: null, error: null }
     const fsh = features.tables ? await supabase.from('floor_shapes').select('*') : { data: null, error: null }
@@ -125,7 +132,7 @@ export async function fetchMenuFromSupabase() {
       supabase.from('stock_items').select('stock_key, name, category, unit, display_unit, data').not('name', 'is', null),
       supabase.from('menu_categories').select('kind, name'),
     ])
-    const error = p.error || s.error || c.error || og.error || fa.error || ft.error || fsh.error
+    const error = p.error || s.error || c.error || og.error || md.error || fa.error || ft.error || fsh.error
     if (error) {
       console.warn('fetchMenuFromSupabase:', error.message || error)
       return null
@@ -146,6 +153,10 @@ export async function fetchMenuFromSupabase() {
       ? og.data.map(r => ({ id: r.id, name: r.name, required: r.required !== false, choices: Array.isArray(r.choices) ? r.choices : [] }))
         .sort((a, b) => a.name.localeCompare(b.name))
       : null
+    const menuDocs = md.data
+      ? md.data.map(r => ({ id: r.id, name: r.name, sort: r.sort ?? 0, doc: r.doc ?? {} }))
+        .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
+      : null
     const floorAreas = fa.data ? fa.data.map(r => ({ id: r.id, name: r.name, sort: r.sort ?? 0 })) : null
     const floorTables = ft.data
       ? ft.data.map(r => ({
@@ -159,7 +170,7 @@ export async function fetchMenuFromSupabase() {
     const floorShapes = fsh.data
       ? fsh.data.map(r => ({ id: r.id, areaId: r.area_id, x: Number(r.x), y: Number(r.y), w: Number(r.w), h: Number(r.h), label: r.label ?? '', style: r.style || 'wall', rot: r.rot != null ? Number(r.rot) : 0 }))
       : null
-    return { products, variants, stockDefinitions, categories, optionGroups, floorAreas, floorTables, floorShapes }
+    return { products, variants, stockDefinitions, categories, optionGroups, menuDocs, floorAreas, floorTables, floorShapes }
   } catch (err) {
     console.warn('fetchMenuFromSupabase failed:', err?.message || err)
     return null

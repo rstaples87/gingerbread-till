@@ -17,6 +17,7 @@ import VenueSignIn from './components/VenueSignIn'
 import UpdateBanner from './components/UpdateBanner'
 import ManagerGate from './components/ManagerGate'
 import Reports from './components/Reports'
+import Menus from './components/Menus'
 import Tables from './components/Tables'
 import SplitBill from './components/SplitBill'
 import DiscountSheet from './components/DiscountSheet'
@@ -377,6 +378,7 @@ async function loadMenuFromSupabase(setters, getLocal, { seed = false } = {}) {
   if (!menu) return false
   const local = getLocal()
   if (menu.optionGroups) setters.setOptionGroups(menu.optionGroups)
+  if (menu.menuDocs) setters.setMenuDocs(menu.menuDocs)
   if (menu.floorAreas) setters.setFloorAreas(menu.floorAreas)
   if (menu.floorTables) setters.setFloorTables(menu.floorTables)
   if (menu.floorShapes) setters.setFloorShapes(menu.floorShapes)
@@ -591,6 +593,7 @@ export default function App() {
   const [productVariants, setProductVariants] = useLocalStorage('bt_product_variants', INITIAL_PRODUCT_VARIANTS)
   const [stockDefinitions, setStockDefinitions] = useLocalStorage('bt_stock_definitions', INITIAL_STOCK_ITEMS)
   const [optionGroups, setOptionGroups] = useLocalStorage('bt_option_groups', [])
+  const [menuDocs, setMenuDocs] = useLocalStorage('bt_menu_docs', [])
   const [floorAreas, setFloorAreas] = useLocalStorage('bt_floor_areas', [])
   const [floorTables, setFloorTables] = useLocalStorage('bt_floor_tables', [])
   const [floorShapes, setFloorShapes] = useLocalStorage('bt_floor_shapes', [])
@@ -665,7 +668,7 @@ export default function App() {
   const [tabIdCounter, setTabIdCounter] = useLocalStorage('bt_tab_counter', 1)
   const [eodReports, setEodReports] = useState([])
   const menuSettersRef = useRef({})
-  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState, setOptionGroups, setFloorAreas, setFloorTables, setFloorShapes }
+  menuSettersRef.current = { setProducts, setProductVariants, setStockDefinitions, setCategoryState, setOptionGroups, setMenuDocs, setFloorAreas, setFloorTables, setFloorShapes }
   const menuLocalRef = useRef({})
   menuLocalRef.current = { products, productVariants, stockDefinitions, categoryState }
   const tabsLoadSettersRef = useRef({ setOpenTabs, setOrders, setTabIdCounter })
@@ -894,6 +897,7 @@ export default function App() {
     subscribeTable('till_realtime_menu_products', 'menu_products', onMenuChange)
     subscribeTable('till_realtime_menu_categories', 'menu_categories', onMenuChange)
     if (features.foodOptions) subscribeTable('till_realtime_menu_option_groups', 'menu_option_groups', onMenuChange)
+    if (features.menus) subscribeTable('till_realtime_menu_docs', 'menu_docs', onMenuChange)
     if (features.tables) {
       subscribeTable('till_realtime_floor_areas', 'floor_areas', onMenuChange)
       subscribeTable('till_realtime_floor_tables', 'floor_tables', onMenuChange)
@@ -1700,7 +1704,11 @@ export default function App() {
       id: group.id || 'og_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       name: String(group.name || '').trim(),
       required: group.required !== false,
-      choices: (group.choices || []).map(c => String(c).trim()).filter(Boolean),
+      choices: (group.choices || [])
+        .map(c => (c && typeof c === 'object'
+          ? { label: String(c.label ?? '').trim(), price: Number(c.price) || 0 }
+          : String(c ?? '').trim()))
+        .filter(c => (typeof c === 'object' ? c.label : c)),
     }
     if (!clean.name || !clean.choices.length) return null
     setOptionGroups(prev => {
@@ -1718,6 +1726,28 @@ export default function App() {
     sendMenuOp('option_group_delete', { id })
     showToast('Option group deleted')
   }, [setOptionGroups, showToast])
+
+  const saveMenuDoc = useCallback((entry) => {
+    const clean = {
+      id: entry.id || 'md_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: String(entry.name || '').trim() || 'Untitled menu',
+      sort: Number(entry.sort) || 0,
+      doc: entry.doc ?? {},
+    }
+    setMenuDocs(prev => {
+      const exists = prev.some(m => m.id === clean.id)
+      const next = exists ? prev.map(m => (m.id === clean.id ? clean : m)) : [...prev, clean]
+      return next.sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
+    })
+    sendMenuOp('menu_doc', clean)
+    return clean
+  }, [setMenuDocs])
+
+  const deleteMenuDoc = useCallback((id) => {
+    setMenuDocs(prev => prev.filter(m => m.id !== id))
+    sendMenuOp('menu_doc_delete', { id })
+    showToast('Menu deleted')
+  }, [setMenuDocs, showToast])
 
   const newFloorId = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 
@@ -1995,6 +2025,7 @@ export default function App() {
     saveStockDefinition, deleteStockDefinition,
     saveCategory,
     optionGroups, saveOptionGroup, deleteOptionGroup,
+    menuDocs, saveMenuDoc, deleteMenuDoc,
     updateTabDetails, moveTab, mergeTabs, unmergeTab, mergeHistory, openSplit: (id) => setSplitTabId(id), openDiscount: (id) => setDiscountTabId(id),
     floorAreas, floorTables, floorShapes, saveFloorTable, deleteFloorTable, addFloorTableRange,
     saveFloorShape, deleteFloorShape,
@@ -2028,6 +2059,7 @@ export default function App() {
         </ManagerGate>
       )}
       {features.tables && view === 'tables' && <Tables {...sharedProps} />}
+      {features.menus && view === 'menus' && <Menus {...sharedProps} />}
       {features.reports && view === 'reports' && (
         <ManagerGate unlocked={managerUnlocked} verifyPin={verifyManagerPin} onUnlock={unlockManager} title="Manager PIN: Reports">
           <Reports {...sharedProps} />

@@ -13,6 +13,7 @@ export default function Nav({ view, setView, openTabsCount }) {
     { key: 'staff', label: 'Staff' },
     { key: 'sales', label: 'Sales' },
     ...(features.reports ? [{ key: 'reports', label: 'Reports' }] : []),
+    ...(features.menus ? [{ key: 'menus', label: 'Menus' }] : []),
     { key: 'settings', label: 'Settings' },
   ]
   return (

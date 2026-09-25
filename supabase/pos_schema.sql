@@ -283,3 +283,21 @@ alter table public.transactions add column if not exists tip numeric;
 -- Drinks loaded from the Haywain team's price sheet (2026-09-23): 127 products
 -- (spirits single+double, draught pints, bottled beer/cider, alcohol-free, soft drinks/mixers/juice/water).
 -- Loaded directly into menu_products on the POS project; see 16 Gingerbread POS/MEMORY.md for the item list and assumptions.
+
+-- Printable menus (added 2026-09-25): one row per menu, layout and wording in `doc`.
+create table if not exists public.menu_docs (
+  id text not null primary key,
+  name text not null,
+  sort integer not null default 0,
+  doc jsonb not null default '{}'::jsonb
+);
+alter table public.menu_docs enable row level security;
+drop policy if exists "venue_signed_in" on public.menu_docs;
+create policy "venue_signed_in" on public.menu_docs for all to authenticated using (true) with check (true);
+alter table public.menu_docs replica identity full;
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'menu_docs') then
+    alter publication supabase_realtime add table public.menu_docs;
+  end if;
+end $$;
