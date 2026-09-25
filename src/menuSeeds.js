@@ -194,6 +194,18 @@ function sunday() {
   })
 }
 
+// Sunday laid out in two columns so the text can be bigger than the single-column version.
+function sundayTwo() {
+  const d = sunday()
+  const [starters, roasts, alt] = d.rows[0].cols[0]
+  const [[desserts], [prices]] = d.rows[1].cols
+  return {
+    ...d,
+    fontSize: 13.5,
+    rows: [row([starters, roasts], [alt, desserts, prices])],
+  }
+}
+
 function breakfast() {
   return docBase({
     fontSize: 10,
@@ -345,6 +357,7 @@ export const haywainMenuSeeds = () => [
   { name: 'Sunday', sort: 3, doc: sunday() },
   { name: 'Breakfast', sort: 4, doc: breakfast() },
   { name: 'Desserts', sort: 5, doc: dessert() },
+  { name: 'Sunday 2', sort: 3, doc: sundayTwo() },
   { name: 'Kids', sort: 6, doc: kids() },
   { name: 'Sunday Kids', sort: 7, doc: sundayKids() },
 ]
