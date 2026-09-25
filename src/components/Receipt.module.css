@@ -8,17 +8,23 @@
     width: 76mm;
     margin: 0 auto;
     font-family: 'Courier New', monospace;
-    font-size: 12px;
+    font-size: 15px;
+    font-weight: 600;
     color: #000;
+    /* Thermal printers render thin/small text very faint; a bolder, larger base weight prints
+       readable and matches how other till software (using a fixed-width bold font) prints on the
+       same printer. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 .center { text-align: center; }
-.brand { font-size: 18px; font-weight: 700; letter-spacing: 1.5px; }
-.tagline { font-size: 10px; letter-spacing: 0.5px; text-transform: uppercase; color: #333; margin-bottom: 2px; }
+.brand { font-size: 22px; font-weight: 700; letter-spacing: 1.5px; }
+.tagline { font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; color: #000; margin-bottom: 2px; }
 .logo { width: 45mm; max-width: 60%; height: auto; margin-bottom: 4px; }
-.small { font-size: 11px; }
-.rule { border-top: 1px dashed #000; margin: 6px 0; }
-.line { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+.small { font-size: 13px; }
+.rule { border-top: 2px solid #000; margin: 7px 0; }
+.line { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .lineText { flex: 1; white-space: pre-wrap; }
 .lineAmt { flex-shrink: 0; }
-.total { font-weight: 700; font-size: 13px; }
+.total { font-weight: 700; font-size: 17px; }
