@@ -206,6 +206,20 @@ function sundayTwo() {
   }
 }
 
+// Sunday on a landscape page, three columns.
+function sundayThree() {
+  const d = sunday()
+  const [starters, roasts, alt] = d.rows[0].cols[0]
+  const [[desserts], [prices]] = d.rows[1].cols
+  return {
+    ...d,
+    orientation: 'landscape',
+    fontSize: 13,
+    header: { ...d.header, logo: 'none' },
+    rows: [row([logo(100), starters], [roasts, prices], [alt, desserts])],
+  }
+}
+
 function breakfast() {
   return docBase({
     fontSize: 10,
@@ -358,6 +372,7 @@ export const haywainMenuSeeds = () => [
   { name: 'Breakfast', sort: 4, doc: breakfast() },
   { name: 'Desserts', sort: 5, doc: dessert() },
   { name: 'Sunday 2', sort: 3, doc: sundayTwo() },
+  { name: 'Sunday 3', sort: 3, doc: sundayThree() },
   { name: 'Kids', sort: 6, doc: kids() },
   { name: 'Sunday Kids', sort: 7, doc: sundayKids() },
 ]
