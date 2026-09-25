@@ -7,6 +7,7 @@ import {
   newDish, newSection, newTextBlock, newImageBlock, newLogoBlock, newRow, itemPriceText, formatMenuPrice,
 } from '../menuDoc'
 import { fmt } from '../utils'
+import { POS_FOOD_CATEGORIES, POS_EXTRA_CATEGORIES } from '../data'
 import { haywainMenuSeeds } from '../menuSeeds'
 import styles from './Menus.module.css'
 
@@ -125,13 +126,52 @@ function ItemRow({ item, block, idx, count, layoutMode, doc, productById, patch,
   )
 }
 
+const NEW_DISH_CATEGORIES = [...POS_FOOD_CATEGORIES, ...POS_EXTRA_CATEGORIES, 'Hot Drinks']
+
+function NewDishSheet({ form, setForm, onSave, onClose }) {
+  const toggleDiet = (code) => setForm(f => ({ ...f, diet: f.diet.includes(code) ? f.diet.filter(c => c !== code) : [...f.diet, code] }))
+  return (
+    <div className={styles.overlay} onClick={onClose}>
+      <form className={styles.picker} onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); onSave() }}>
+        <div className={styles.pickerHead}><strong>New dish</strong><button type="button" className={styles.linkBtn} onClick={onClose}>Cancel</button></div>
+        <input className={styles.input} autoFocus placeholder="Dish name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        <textarea className={styles.input} rows={2} placeholder="Description (optional)" value={form.desc} onChange={e => setForm(f => ({ ...f, desc: e.target.value }))} />
+        <div className={styles.dietRow}>
+          {DIET_CODES.map(code => (
+            <button key={code} type="button" className={`${styles.chip} ${form.diet.includes(code) ? styles.chipOn : ''}`} onClick={() => toggleDiet(code)}>{code}</button>
+          ))}
+        </div>
+        <label className={styles.check}>
+          <input type="checkbox" checked={form.alsoTill} onChange={e => setForm(f => ({ ...f, alsoTill: e.target.checked }))} />
+          Also add it to the till (so it can be sold)
+        </label>
+        <div className={styles.itemLine}>
+          <input className={`${styles.input} ${styles.price}`} type="number" min="0" step="0.01" placeholder="Price" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+          {form.alsoTill && (
+            <select className={`${styles.input} ${styles.grow}`} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+              {NEW_DISH_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+        </div>
+        <div className={styles.muted}>
+          {form.alsoTill
+            ? 'It appears on the till under the category above, and the menu takes its price from the till.'
+            : 'Menu only — it will print, but it can\'t be rung through the till.'}
+        </div>
+        <button type="submit" className={styles.primary}>Add dish</button>
+      </form>
+    </div>
+  )
+}
+
 export default function Menus({
-  menuDocs = [], saveMenuDoc, deleteMenuDoc, products = [],
+  menuDocs = [], saveMenuDoc, deleteMenuDoc, products = [], saveProduct,
   managerUnlocked, verifyManagerPin, unlockManager,
 }) {
   const [selectedId, setSelectedId] = useState(null)
   const [draft, setDraft] = useState(null) // { id, name, sort, doc }
   const [wantLayout, setWantLayout] = useState(false)
+  const [newDishForm, setNewDishForm] = useState(null) // { blockId, name, desc, price, category, diet, alsoTill }
   const [picker, setPicker] = useState(null) // { mode: 'item'|'link'|'heading', blockId, itemId? }
   const [saveNote, setSaveNote] = useState('')
   const [printing, setPrinting] = useState(false)
@@ -249,6 +289,26 @@ export default function Menus({
   })
   const removeItem = (blockId, idx) => withBlock(blockId, b => { b.items.splice(idx, 1) })
   const addItem = (blockId, item) => withBlock(blockId, b => { b.items.push(item) })
+
+  const openNewDish = (block) => {
+    const guess = NEW_DISH_CATEGORIES.find(c => c.toLowerCase() === String(block.title || '').trim().toLowerCase())
+    setNewDishForm({ blockId: block.id, name: '', desc: '', price: '', category: guess || NEW_DISH_CATEGORIES[1], diet: [], alsoTill: !!saveProduct })
+  }
+  const saveNewDish = () => {
+    const f = newDishForm
+    const name = f.name.trim()
+    if (!name) return
+    if (f.alsoTill) {
+      const price = Number(f.price)
+      if (f.price === '' || Number.isNaN(price) || price < 0) return
+      const id = Math.max(0, ...products.map(p => Number(p.id) || 0)) + 1
+      saveProduct({ id, name, price, category: f.category, stock: 0, vatRate: 20, group: 'food' }, null)
+      addItem(f.blockId, newDish({ name, desc: f.desc.trim(), diet: f.diet, productId: id }))
+    } else {
+      addItem(f.blockId, newDish({ name, desc: f.desc.trim(), diet: f.diet, price: f.price.trim() }))
+    }
+    setNewDishForm(null)
+  }
 
   const onPick = (p) => {
     if (!picker) return
@@ -473,7 +533,7 @@ export default function Menus({
                               ))}
                               <div className={styles.addRow}>
                                 <button type="button" className={styles.addBtn} onClick={() => setPicker({ mode: 'item', blockId: b.id })}>+ Dish from till</button>
-                                <button type="button" className={styles.addBtn} onClick={() => addItem(b.id, newDish())}>+ Dish (type it)</button>
+                                <button type="button" className={styles.addBtn} onClick={() => openNewDish(b)}>+ New dish</button>
                                 <button type="button" className={styles.addBtn} onClick={() => addItem(b.id, { id: uid(), kind: 'heading', name: 'Sub-heading' })}>+ Sub-heading</button>
                                 <button type="button" className={styles.addBtn} onClick={() => addItem(b.id, { id: uid(), kind: 'note', desc: '' })}>+ Text line</button>
                               </div>
@@ -547,6 +607,7 @@ export default function Menus({
         </div>
       )}
 
+      {newDishForm && <NewDishSheet form={newDishForm} setForm={setNewDishForm} onSave={saveNewDish} onClose={() => setNewDishForm(null)} />}
       {picker && <ProductPicker products={products} onPick={onPick} onClose={() => setPicker(null)} />}
 
       {printing && draft && createPortal(
