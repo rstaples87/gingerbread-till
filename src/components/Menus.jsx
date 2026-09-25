@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import ManagerGate from './ManagerGate'
 import MenuSheet from './MenuSheet'
 import {
-  MENU_ART, DIET_CODES, uid, blankDoc, ensureIds, docImageSrcs,
+  MENU_ART, DIET_CODES, ROW_WIDTHS, uid, blankDoc, ensureIds, docImageSrcs,
   newDish, newSection, newTextBlock, newImageBlock, newLogoBlock, newRow, itemPriceText, formatMenuPrice,
 } from '../menuDoc'
 import { fmt } from '../utils'
@@ -275,6 +275,7 @@ export default function Menus({
     while (row.cols.length < n) row.cols.push([])
     while (row.cols.length > n) { const extra = row.cols.pop(); row.cols[row.cols.length - 1].push(...extra) }
   })
+  const setRowWidths = (r, widths) => edit(doc => { if (widths) doc.rows[r].widths = widths; else delete doc.rows[r].widths })
   const removeRow = (r) => {
     if (!window.confirm('Remove this whole row and everything in it?')) return
     edit(doc => { doc.rows.splice(r, 1) })
@@ -469,6 +470,13 @@ export default function Menus({
                         <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option>
                       </select>
                     </label>
+                    {row.cols.length === 2 && (
+                      <label className={styles.check}>Widths
+                        <select className={styles.input} value={row.widths || ''} onChange={e => setRowWidths(r, e.target.value)}>
+                          {ROW_WIDTHS.map(w => <option key={w.label} value={w.value}>{w.label}</option>)}
+                        </select>
+                      </label>
+                    )}
                     <span className={styles.arrows}>
                       <button type="button" disabled={r === 0} onClick={() => moveRow(r, -1)}>▲</button>
                       <button type="button" disabled={r === doc.rows.length - 1} onClick={() => moveRow(r, 1)}>▼</button>
@@ -513,6 +521,7 @@ export default function Menus({
                                   <label className={styles.check}><input type="checkbox" checked={b.align === 'center'} onChange={e => withBlock(b.id, x => { x.align = e.target.checked ? 'center' : 'left' })} /> Centred</label>
                                   <label className={styles.check}><input type="checkbox" checked={b.priceLayout === 'right'} onChange={e => withBlock(b.id, x => { x.priceLayout = e.target.checked ? 'right' : 'inline' })} /> Prices on right</label>
                                   <label className={styles.check}><input type="checkbox" checked={!!b.sideTitle} onChange={e => withBlock(b.id, x => { x.sideTitle = e.target.checked })} /> Title down the side</label>
+                                  <label className={styles.check}><input type="checkbox" checked={b.itemColumns === 2} onChange={e => withBlock(b.id, x => { x.itemColumns = e.target.checked ? 2 : 1 })} /> Dishes in 2 columns</label>
                                 </div>
                               )}
                               {b.items.map((it, idx) => (

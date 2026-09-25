@@ -214,9 +214,12 @@ function sundayThree() {
   return {
     ...d,
     orientation: 'landscape',
-    fontSize: 13,
+    fontSize: 12,
     header: { ...d.header, logo: 'none' },
-    rows: [row([logo(100), starters], [roasts, prices], [alt, desserts])],
+    rows: [
+      row([logo(60), starters, prices], [roasts], [alt]),
+      { ...row([], [{ ...desserts, itemColumns: 2 }]), widths: 'calc((100% - 8mm) / 3) 1fr' },
+    ],
   }
 }
 

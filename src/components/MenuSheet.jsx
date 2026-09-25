@@ -82,7 +82,9 @@ function Block({ block, doc, productById }) {
     <div className={cls}>
       {title && <div className={styles.title}>{title}</div>}
       {block.note && <div className={styles.noteLine}>{lines(block.note).map((l, i) => <div key={i}>{l}</div>)}</div>}
-      {(block.items ?? []).map(it => <Item key={it.id} item={it} block={block} doc={doc} productById={productById} />)}
+      <div className={block.itemColumns === 2 ? styles.twoCol : undefined}>
+        {(block.items ?? []).map(it => <Item key={it.id} item={it} block={block} doc={doc} productById={productById} />)}
+      </div>
     </div>
   )
 }
@@ -119,7 +121,7 @@ export default function MenuSheet({ doc, products, sheetRef }) {
       ) : null}
 
       {(doc.rows ?? []).map(row => (
-        <div key={row.id} className={styles.row} style={{ '--cols': row.cols.length }}>
+        <div key={row.id} className={styles.row} style={{ '--cols': row.cols.length, ...(row.widths ? { gridTemplateColumns: row.widths } : {}) }}>
           {row.cols.map((col, ci) => (
             <div key={ci} className={styles.col}>
               {col.map(b => <Block key={b.id} block={b} doc={doc} productById={productById} />)}

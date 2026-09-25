@@ -10,7 +10,8 @@
  *   rows: [{ id, cols: [[block, ...], [block, ...]] }],   // each row is a grid of 1-3 columns, each column a stack of blocks
  *   footer: '',
  * }
- * block = { id, type: 'section', title, headingPrice, headingPriceProductId, note, boxed, align, priceLayout, sideTitle, items: [item] }
+ * row may carry `widths` (a CSS grid-template-columns value) to make columns unequal.
+ * block = { id, type: 'section', title, headingPrice, headingPriceProductId, note, boxed, align, priceLayout, sideTitle, itemColumns (1|2), items: [item] }
  *       | { id, type: 'text', text, boxed, align, bold }
  *       | { id, type: 'image', art, width }
  *       | { id, type: 'logo', width }
@@ -56,6 +57,12 @@ export const newSection = () => ({
 export const newTextBlock = () => ({ id: uid(), type: 'text', text: 'Some text', boxed: false, align: 'center', bold: false })
 export const newImageBlock = () => ({ id: uid(), type: 'image', art: 'tractor', width: 100 })
 export const newLogoBlock = () => ({ id: uid(), type: 'logo', width: 100 })
+// Widths that line a 2-column row up with the 3-column row above it (4mm gaps): one third + two thirds.
+export const ROW_WIDTHS = [
+  { value: '', label: 'Equal' },
+  { value: 'calc((100% - 8mm) / 3) 1fr', label: 'Narrow, then wide (thirds)' },
+  { value: '1fr calc((100% - 8mm) / 3)', label: 'Wide, then narrow (thirds)' },
+]
 export const newRow = (cols = 1) => ({ id: uid(), cols: Array.from({ length: cols }, () => []) })
 
 export const blankDoc = () => ({

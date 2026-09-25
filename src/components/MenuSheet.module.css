@@ -44,7 +44,8 @@
 .title { font-weight: 700; text-decoration: underline; font-size: 1.15em; margin-bottom: 1.5mm; }
 .subheading { font-weight: 700; text-decoration: underline; margin: 2.5mm 0 1mm; }
 .noteLine { margin: 0 0 1.5mm; }
-.item { margin-bottom: 1.9mm; }
+.item { margin-bottom: 1.9mm; break-inside: avoid; }
+.twoCol { column-count: 2; column-gap: 8mm; }
 .itemCompact { margin-bottom: 0.7mm; }
 .name { font-weight: 700; }
 .namePlain { font-weight: 400; }
