@@ -150,7 +150,7 @@ export async function fetchMenuFromSupabase() {
       if (categories[row.kind]) categories[row.kind].push(row.name)
     }
     const optionGroups = og.data
-      ? og.data.map(r => ({ id: r.id, name: r.name, required: r.required !== false, choices: Array.isArray(r.choices) ? r.choices : [] }))
+      ? og.data.map(r => ({ id: r.id, name: r.name, required: r.required !== false, choices: Array.isArray(r.choices) ? r.choices : [], multi: r.multi === true }))
         .sort((a, b) => a.name.localeCompare(b.name))
       : null
     const menuDocs = md.data

@@ -1703,7 +1703,8 @@ export default function App() {
     const clean = {
       id: group.id || 'og_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       name: String(group.name || '').trim(),
-      required: group.required !== false,
+      required: group.multi ? false : group.required !== false,
+      multi: !!group.multi,
       choices: (group.choices || [])
         .map(c => (c && typeof c === 'object'
           ? { label: String(c.label ?? '').trim(), price: Number(c.price) || 0 }

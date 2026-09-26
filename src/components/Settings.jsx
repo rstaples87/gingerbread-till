@@ -313,6 +313,7 @@ export default function Settings({
     id: g.id,
     name: g.name,
     required: g.required !== false,
+    multi: !!g.multi,
     choicesText: (g.choices || []).map(normalizeChoice).map(({ label, price }) => (price ? `${label} | ${price.toFixed(2)}` : label)).join('\n'),
   })
   const submitGroup = (event) => {
@@ -326,6 +327,7 @@ export default function Settings({
       id: groupForm.id,
       name: groupForm.name,
       required: groupForm.required,
+      multi: groupForm.multi,
       choices,
     })
     if (saved) setGroupForm(null)
@@ -477,7 +479,7 @@ export default function Settings({
             {optionGroups.map(g => (
               <div key={g.id} className={styles.row}>
                 <div className={styles.rowInfo}>
-                  <div className={styles.name}>{g.name} {g.required ? '(required)' : '(optional)'}</div>
+                  <div className={styles.name}>{g.name} {g.required ? '(required)' : g.multi ? '(tick any)' : '(optional)'}</div>
                   <div className={styles.meta}>
                     {(g.choices || []).map(normalizeChoice).map(({ label, price }) => (price ? `${label} (+${fmt(price)})` : label)).join(', ')}
                   </div>
@@ -580,8 +582,12 @@ export default function Settings({
               <input value={groupForm.name} onChange={event => setGroupForm(f => ({ ...f, name: event.target.value }))} placeholder="e.g. Steak cooking" />
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '6px 0' }}>
-              <input type="checkbox" style={{ width: 'auto', margin: 0 }} checked={groupForm.required} onChange={event => setGroupForm(f => ({ ...f, required: event.target.checked }))} />
+              <input type="checkbox" style={{ width: 'auto', margin: 0 }} checked={groupForm.required && !groupForm.multi} disabled={groupForm.multi} onChange={event => setGroupForm(f => ({ ...f, required: event.target.checked }))} />
               Must choose one (required)
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '6px 0' }}>
+              <input type="checkbox" style={{ width: 'auto', margin: 0 }} checked={!!groupForm.multi} onChange={event => setGroupForm(f => ({ ...f, multi: event.target.checked, required: event.target.checked ? false : f.required }))} />
+              Allow several choices (e.g. extras)
             </label>
             <label className={styles.field}>
               <span>Choices (one per line — add "| price" for a paid add-on, e.g. "Add bacon | 3.00")</span>

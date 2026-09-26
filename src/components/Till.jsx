@@ -311,13 +311,17 @@ export default function Till({
       showToast('Choose: ' + missing.name)
       return
     }
-    const chosenOptions = itemGroups
-      .filter(g => numpad.options?.[g.id])
-      .map(g => {
-        const label = numpad.options[g.id]
-        const match = (g.choices || []).map(normalizeChoice).find(c => c.label === label)
+    const chosenOptions = itemGroups.flatMap(g => {
+      const sel = numpad.options?.[g.id]
+      if (!sel || (Array.isArray(sel) && !sel.length)) return []
+      const all = (g.choices || []).map(normalizeChoice)
+      // Several-choice groups keep the menu's order so identical selections merge into one line.
+      const labels = Array.isArray(sel) ? all.map(c => c.label).filter(l => sel.includes(l)) : [sel]
+      return labels.map(label => {
+        const match = all.find(c => c.label === label)
         return { group: g.name, choice: label, ...(match?.price ? { price: match.price } : {}) }
       })
+    })
     const lineNote = (numpad.note || '').trim()
     const lineKey = orderLineKey(id, chosenOptions, lineNote)
 
@@ -1142,19 +1146,27 @@ export default function Till({
                 <div className={styles.optionsBlock}>
                   {groups.map(g => (
                     <div key={g.id} className={styles.optGroup}>
-                      <div className={styles.optLabel}>{g.name}{g.required ? ' *' : ' (optional)'}</div>
+                      <div className={styles.optLabel}>{g.name}{g.required ? ' *' : g.multi ? ' (tick any)' : ' (optional)'}</div>
                       <div className={styles.optChips}>
                         {g.choices.map(normalizeChoice).map(({ label, price }) => {
-                          const on = numpad.options?.[g.id] === label
+                          const cur = numpad.options?.[g.id]
+                          const on = g.multi ? Array.isArray(cur) && cur.includes(label) : cur === label
                           return (
                             <button
                               key={label}
                               type="button"
                               className={`${styles.optChip} ${on ? styles.optChipOn : ''}`}
-                              onClick={() => setNumpad(prev => ({
-                                ...prev,
-                                options: { ...(prev.options || {}), [g.id]: on && !g.required ? undefined : label },
-                              }))}
+                              onClick={() => setNumpad(prev => {
+                                const now = prev.options?.[g.id]
+                                let next
+                                if (g.multi) {
+                                  const list = Array.isArray(now) ? now : []
+                                  next = list.includes(label) ? list.filter(x => x !== label) : [...list, label]
+                                } else {
+                                  next = on && !g.required ? undefined : label
+                                }
+                                return { ...prev, options: { ...(prev.options || {}), [g.id]: next } }
+                              })}
                             >
                               {label}{price ? ` (+${fmt(price)})` : ''}
                             </button>

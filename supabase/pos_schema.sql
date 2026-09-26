@@ -188,6 +188,9 @@ begin
   end if;
 end $$;
 
+-- Option groups that allow several choices at once, e.g. breakfast add-ons (added 2026-09-26).
+alter table public.menu_option_groups add column if not exists multi boolean not null default false;
+
 -- Table plan and covers (added 2026-09-21).
 create table if not exists public.floor_areas (
   id text not null primary key,
