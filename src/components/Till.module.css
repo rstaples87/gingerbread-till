@@ -668,7 +668,7 @@
   }
 }
 
-@media (min-width: 1025px) {
+@media (min-width: 900px) {
   .wrap {
     display: grid;
     grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);

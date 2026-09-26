@@ -172,7 +172,7 @@
   }
 }
 
-@media (min-width: 1025px) {
+@media (min-width: 900px) {
   .scroll { padding: 18px; }
   .rowActions { gap: 8px; }
   .sheet {

@@ -50,7 +50,7 @@ input { font-family: inherit; }
   }
 }
 
-@media (min-width: 1025px) {
+@media (min-width: 900px) {
   #root {
     max-width: 1200px;
   }
