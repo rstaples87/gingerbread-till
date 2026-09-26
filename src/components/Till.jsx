@@ -322,6 +322,10 @@ export default function Till({
         return { group: g.name, choice: label, ...(match?.price ? { price: match.price } : {}) }
       })
     })
+    if (itemGroups.length && !Number(product.price) && !chosenOptions.length) {
+      showToast('Tick at least one option')
+      return
+    }
     const lineNote = (numpad.note || '').trim()
     const lineKey = orderLineKey(id, chosenOptions, lineNote)
 
