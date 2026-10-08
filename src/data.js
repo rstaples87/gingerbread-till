@@ -156,7 +156,7 @@ export const CATEGORIES = ['Wine', 'Beer', 'Cider', 'Spirits', 'Shots', 'Soft Dr
 /** Starting till categories for the Haywain POS build (editable in Settings). Food ones default new products to 'food'. */
 export const POS_FOOD_CATEGORIES = ['Starters', 'Mains', 'Sides', 'Griddle & Burgers', 'Sharing Boards', 'Desserts', 'Kids Menu']
 /** Their own line under the food row — breakfast/Sunday/sandwiches/half pints aren't every-order items. */
-export const POS_EXTRA_CATEGORIES = ['Breakfast', 'Sunday', 'Sandwiches', 'Half Pints']
+export const POS_EXTRA_CATEGORIES = ['Breakfast', 'Sunday', 'Sandwiches', 'Half Pints', 'Christmas']
 export const POS_TILL_CATEGORIES = [
   ...POS_FOOD_CATEGORIES, ...POS_EXTRA_CATEGORIES,
   'Wine', 'Beer', 'Cider', 'Spirits', 'Soft Drinks', 'Low & Free', 'Hot Drinks',
