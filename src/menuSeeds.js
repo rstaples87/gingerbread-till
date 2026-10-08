@@ -367,6 +367,39 @@ function sundayKids() {
   ])
 }
 
+// Christmas 2026 set menu: centred single column, course prices typed (no till products for them).
+function christmas() {
+  return docBase({
+    fontSize: 13,
+    header: { logo: 'center', title: '', titleStyle: 'plain', text: 'Christmas Menu' },
+    rows: [
+      row([section('Starters', [
+        dish('Maple Roasted Sweet Potato Soup', 'Smoked Paprika and Toasted Chestnuts'),
+        dish('Cider Cured Salmon', 'Apple and Celeriac Remoulade, with Sweet Mustard Dressing'),
+        dish('Smoked Chicken Caesar Salad', 'Baby Gem, Parmesan, Crispy Bacon and Garlic Croutons'),
+        dish('Honey Roasted Pear', 'Whipped Stilton, Candied Walnuts and Cranberry Dressing'),
+      ], { align: 'center' })]),
+      row([section('Mains', [
+        dish('Roast Turkey', 'Chestnut Stuffing, Pigs in Blankets, Turkey Gravy, Cranberry and Bread Sauce'),
+        dish('Slow Braised Feather Blade of Beef', 'Crispy Onions and Adnams Ale Gravy'),
+        dish('Smoked Haddock and Prawn Gratin', 'Buttered leeks, Mature Cheddar Crumb'),
+        dish('Mushroom, Butternut Squash and Chestnut Wellington', 'Smoked Cheddar and Parsley Sauce'),
+        note('All served with Roasted Potatoes, Glazed Carrots and Parsnips, and Brussels Sprouts'),
+      ], { align: 'center' })]),
+      row([section('Dessert', [
+        dish('Christmas Pudding', 'Spiced Mascarpone Cream, Mulled Wine Syrup'),
+        dish('Clementine Panna Cotta', 'Cinnamon Crumb and Candied Orange'),
+        dish('Black Forest Cheesecake', 'Cherry compote, Chocolate Crumb'),
+        dish('Selection of Cheeses, Biscuits', 'Winter Chutney'),
+      ], { align: 'center' })]),
+      row([section('', [
+        dish('Two Courses', '', { price: '£32.95' }),
+        dish('Three Courses', '', { price: '£37.95' }),
+      ], { boxed: true, align: 'center' })]),
+    ],
+  })
+}
+
 /** Fresh copies each call (new ids), in the order they appear as tabs. */
 export const haywainMenuSeeds = () => [
   { name: 'Evening', sort: 1, doc: evening() },
@@ -378,4 +411,5 @@ export const haywainMenuSeeds = () => [
   { name: 'Sunday 3', sort: 3, doc: sundayThree() },
   { name: 'Kids', sort: 6, doc: kids() },
   { name: 'Sunday Kids', sort: 7, doc: sundayKids() },
+  { name: 'Christmas', sort: 8, doc: christmas() },
 ]
