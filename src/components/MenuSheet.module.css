@@ -74,4 +74,6 @@
 }
 .sideBody { flex: 1; }
 
+.dietKey { font-size: 0.85em; line-height: 1.4; }
+.keyItem { white-space: nowrap; }
 .footer { margin-top: 3mm; text-align: center; font-weight: 700; font-size: 0.85em; color: var(--grey); }

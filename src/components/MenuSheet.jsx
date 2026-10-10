@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { MENU_ART, MENU_LOGO_SRC, itemPriceText, headingText } from '../menuDoc'
+import { MENU_ART, MENU_LOGO_SRC, itemPriceText, headingText, dietKeyParts } from '../menuDoc'
 import styles from './MenuSheet.module.css'
 
 const ROW_ALIGN = { middle: 'center', bottom: 'end' }
@@ -134,7 +134,19 @@ export default function MenuSheet({ doc, products, sheetRef }) {
         </div>
       ))}
 
-      {doc.footer && <div className={styles.footer}>{lines(doc.footer).map((l, i) => <div key={i}>{l}</div>)}</div>}
+      {(doc.footer || (doc.dietKey && dietKeyParts(doc).length > 0)) && (
+        <div className={styles.footer}>
+          {lines(doc.footer).filter(Boolean).map((l, i) => <div key={i}>{l}</div>)}
+          {doc.dietKey && dietKeyParts(doc).length > 0 && (
+            <div className={styles.dietKey}>
+              <span className={styles.keyItem}>Allergy Code:</span>{' '}
+              {dietKeyParts(doc).map((p, i) => (
+                <span key={p}>{i > 0 && ' | '}<span className={styles.keyItem}>{p}</span></span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

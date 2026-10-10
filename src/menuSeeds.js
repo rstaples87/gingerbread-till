@@ -370,7 +370,8 @@ function sundayKids() {
 // Christmas 2026 set menu: centred single column, course prices typed (no till products for them).
 function christmas() {
   return docBase({
-    fontSize: 13,
+    fontSize: 12,
+    dietKey: true,
     header: { logo: 'center', title: '', titleStyle: 'plain', text: 'Christmas Menu' },
     rows: [
       row([section('Starters', [

@@ -471,6 +471,10 @@ export default function Menus({
               <label className={styles.stack}>Footer text
                 <textarea className={styles.input} rows={2} value={doc.footer} onChange={e => edit(d => { d.footer = e.target.value })} />
               </label>
+              <label className={styles.check}>
+                <input type="checkbox" checked={!!doc.dietKey} onChange={e => edit(d => { d.dietKey = e.target.checked })} />
+                Print a key to the dietary tags used on this menu (e.g. V - Vegetarian | GFO - Gluten Free Option)
+              </label>
             </div>
 
             {doc.rows.map((row, r) => (

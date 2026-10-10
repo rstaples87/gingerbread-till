@@ -28,7 +28,19 @@ export const MENU_ART = {
 }
 export const MENU_LOGO_SRC = '/menu-art/haywain-logo.png'
 
-export const DIET_CODES = ['V', 'VG', 'VGO', 'GF', 'GFO', 'N']
+// "...O" means the dish can easily be made that way on request (e.g. GFO = gluten free option).
+export const DIET_CODES = ['V', 'VO', 'VG', 'VGO', 'GF', 'GFO', 'DF', 'DFO', 'N']
+export const DIET_LABELS = {
+  V: 'Vegetarian', VO: 'Vegetarian Option', VG: 'Vegan', VGO: 'Vegan Option',
+  GF: 'Gluten Free', GFO: 'Gluten Free Option', DF: 'Dairy Free', DFO: 'Dairy Free Option', N: 'Contains Nuts',
+}
+
+/** The key printed in the footer when a menu has dietKey on: only the tags this menu actually uses. */
+export function dietKeyParts(doc) {
+  const used = new Set()
+  for (const row of doc?.rows ?? []) for (const col of row.cols ?? []) for (const b of col) for (const it of b.items ?? []) for (const c of it.diet ?? []) used.add(c)
+  return DIET_CODES.filter(c => used.has(c)).map(c => `${c} - ${DIET_LABELS[c]}`)
+}
 
 export const uid = () => Math.random().toString(36).slice(2, 9)
 
