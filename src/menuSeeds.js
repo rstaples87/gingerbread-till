@@ -18,6 +18,7 @@ const section = (title, items, o = {}) => ({
   note: o.note ?? '', boxed: !!o.boxed, align: o.align ?? 'left', priceLayout: o.right ? 'right' : 'inline', sideTitle: !!o.side, items,
 })
 const text = (t, o = {}) => ({ id: uid(), type: 'text', text: t, boxed: !!o.boxed, align: o.align ?? 'center', bold: !!o.bold })
+const dietKeyBlock = () => ({ id: uid(), type: 'dietkey', boxed: true, align: 'center' })
 const logo = (width = 100) => ({ id: uid(), type: 'logo', width })
 const image = (art, width = 100) => ({ id: uid(), type: 'image', art, width })
 const row = (...cols) => ({ id: uid(), cols })
@@ -126,6 +127,7 @@ function lunch() {
             dish('Slow Cooked Beef Brisket', 'Fries, Barbecue Sauce, Smokey Garlic Butter Corn, Coleslaw', { pid: 406 }),
             dish('Oven Roasted Chicken Breast', 'Sweetcorn Cream Sauce, Chilli Oil, Sauteed Potatoes', { pid: 410 }),
           ], { boxed: true, align: 'center' }),
+          dietKeyBlock(),
         ],
         [
           section('Sharing Boards - For Two', [

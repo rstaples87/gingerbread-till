@@ -16,6 +16,7 @@
  *       | { id, type: 'text', text, boxed, align, bold }
  *       | { id, type: 'image', art, width }
  *       | { id, type: 'logo', width }
+ *       | { id, type: 'dietkey', boxed, align }   // key to the dietary tags this menu uses, as a block you can place anywhere
  * item  = { id, kind: 'dish' | 'heading' | 'note', name, desc, price, productId, diet: ['V', ...], plain, fontSize }
  * Any section/text block and any item can carry its own `fontSize` (pt) to override the menu's text size.
  * A dish with a productId takes its price live from the till, so a price change is made once.
@@ -70,6 +71,7 @@ export const newSection = () => ({
 })
 export const newTextBlock = () => ({ id: uid(), type: 'text', text: 'Some text', boxed: false, align: 'center', bold: false })
 export const newImageBlock = () => ({ id: uid(), type: 'image', art: 'tractor', width: 100 })
+export const newDietKeyBlock = () => ({ id: uid(), type: 'dietkey', boxed: true, align: 'center' })
 export const newLogoBlock = () => ({ id: uid(), type: 'logo', width: 100 })
 // Widths that line a 2-column row up with the 3-column row above it (4mm gaps): one third + two thirds.
 export const ROW_WIDTHS = [

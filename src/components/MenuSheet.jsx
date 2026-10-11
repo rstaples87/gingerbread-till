@@ -43,6 +43,19 @@ function Item({ item, block, doc, productById }) {
 }
 
 function Block({ block, doc, productById }) {
+  if (block.type === 'dietkey') {
+    const parts = dietKeyParts(doc)
+    if (!parts.length) return null
+    const kcls = [styles.block, block.boxed ? styles.boxed : '', block.align === 'center' ? styles.center : ''].filter(Boolean).join(' ')
+    return (
+      <div className={kcls} style={ptStyle(block.fontSize)}>
+        <div className={styles.title}>Allergy Code</div>
+        <div className={parts.length > 4 ? styles.keyCols : undefined}>
+          {parts.map(p => <div key={p} className={styles.keyLine}>{p}</div>)}
+        </div>
+      </div>
+    )
+  }
   if (block.type === 'logo') {
     return <div className={styles.center}><img className={styles.logoImg} style={{ width: `${block.width ?? 100}%` }} src={MENU_LOGO_SRC} alt="The Haywain" /></div>
   }

@@ -76,4 +76,6 @@
 
 .dietKey { font-size: 0.85em; line-height: 1.4; }
 .keyItem { white-space: nowrap; }
+.keyLine { margin-bottom: 0.6mm; break-inside: avoid; }
+.keyCols { column-count: 2; column-gap: 5mm; text-align: left; }
 .footer { margin-top: 3mm; text-align: center; font-weight: 700; font-size: 0.85em; color: var(--grey); }

@@ -4,7 +4,7 @@ import ManagerGate from './ManagerGate'
 import MenuSheet from './MenuSheet'
 import {
   MENU_ART, DIET_CODES, ROW_WIDTHS, uid, blankDoc, ensureIds, docImageSrcs,
-  newDish, newSection, newTextBlock, newImageBlock, newLogoBlock, newRow, itemPriceText, formatMenuPrice,
+  newDish, newSection, newTextBlock, newImageBlock, newLogoBlock, newDietKeyBlock, newRow, itemPriceText, formatMenuPrice,
 } from '../menuDoc'
 import { fmt } from '../utils'
 import { POS_FOOD_CATEGORIES, POS_EXTRA_CATEGORIES } from '../data'
@@ -603,6 +603,17 @@ export default function Menus({
                               </label>
                             </div>
                           )}
+                          {b.type === 'dietkey' && (
+                            <>
+                              <div className={styles.muted}>Dietary key — prints the tags this menu uses, one per line.</div>
+                              {layoutMode && (
+                                <div className={styles.styleRow}>
+                                  <label className={styles.check}><input type="checkbox" checked={!!b.boxed} onChange={e => withBlock(b.id, x => { x.boxed = e.target.checked })} /> Box</label>
+                                  <label className={styles.check}><input type="checkbox" checked={b.align === 'center'} onChange={e => withBlock(b.id, x => { x.align = e.target.checked ? 'center' : 'left' })} /> Centred</label>
+                                </div>
+                              )}
+                            </>
+                          )}
                           {b.type === 'logo' && (
                             <div className={styles.itemLine}>
                               <span className={styles.kind}>Logo</span>
@@ -619,6 +630,7 @@ export default function Menus({
                           <button type="button" className={styles.addBtn} onClick={() => addBlock(r, c, newTextBlock)}>+ Text</button>
                           <button type="button" className={styles.addBtn} onClick={() => addBlock(r, c, newImageBlock)}>+ Picture</button>
                           <button type="button" className={styles.addBtn} onClick={() => addBlock(r, c, newLogoBlock)}>+ Logo</button>
+                          <button type="button" className={styles.addBtn} onClick={() => addBlock(r, c, newDietKeyBlock)}>+ Dietary key</button>
                         </div>
                       )}
                     </div>
