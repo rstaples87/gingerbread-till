@@ -397,7 +397,7 @@ export const haywainMenuSeeds = () => [
   { name: 'Lunch', sort: 2, doc: lunch() },
   { name: 'Breakfast', sort: 4, doc: breakfast() },
   { name: 'Desserts', sort: 5, doc: dessert() },
-  { name: 'Sunday 3', sort: 3, doc: sundayThree() },
+  { name: 'Sunday', sort: 3, doc: sundayThree() },
   { name: 'Kids', sort: 6, doc: kids() },
   { name: 'Sunday Kids', sort: 7, doc: sundayKids() },
   { name: 'Christmas', sort: 8, doc: christmas() },
